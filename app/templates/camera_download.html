@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+
+{% block title %}Download from Camera - Sentinel Logger{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('main.upload') }}">Upload</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Download from Camera</li>
+            </ol>
+        </nav>
+        <h1 class="h3">
+            <i class="bi bi-camera-video me-2"></i>Download Log from Camera
+        </h1>
+        <p class="text-muted">Connect to your camera via WiFi and download log files directly</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-wifi me-2"></i>Camera Connection</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('main.camera_download') }}" method="post" id="downloadForm">
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <label for="camera_ip" class="form-label">Camera IP Address</label>
+                            <input type="text" class="form-control" id="camera_ip" name="camera_ip"
+                                   value="{{ default_ip }}" required placeholder="192.168.50.1">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="port" class="form-label">SSH Port</label>
+                            <input type="number" class="form-control" id="port" name="port"
+                                   value="{{ default_port }}" required>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="username" name="username"
+                                   value="{{ default_user }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="password" name="password"
+                                   value="{{ default_password }}" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="log_path" class="form-label">Log File Path</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="log_path" name="log_path"
+                                   value="{{ default_log_path }}" required placeholder="/var/log/messages">
+                            <button class="btn btn-outline-secondary" type="button" onclick="browseLogFiles()">
+                                <i class="bi bi-folder2-open"></i> Browse
+                            </button>
+                        </div>
+                        <div class="form-text">Common paths: /var/log/messages, /var/log/syslog, /var/log/kern.log</div>
+                    </div>
+
+                    <!-- Connection Status -->
+                    <div id="connectionStatus" class="alert d-none mb-3"></div>
+
+                    <!-- Camera Info Panel -->
+                    <div id="cameraInfoPanel" class="card bg-light d-none mb-3">
+                        <div class="card-body">
+                            <h6 class="card-title"><i class="bi bi-info-circle me-2"></i>Camera Information</h6>
+                            <div id="cameraInfoContent" class="small">
+                                <!-- Populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Available Log Files -->
+                    <div id="logFilesPanel" class="d-none mb-3">
+                        <label class="form-label">Available Log Files:</label>
+                        <div id="logFilesList" class="list-group" style="max-height: 200px; overflow-y: auto;">
+                            <!-- Populated by JavaScript -->
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" onclick="testConnection()">
+                            <i class="bi bi-plug me-1"></i>Test Connection
+                        </button>
+                        <button type="button" class="btn btn-outline-info" onclick="getCameraInfo()">
+                            <i class="bi bi-cpu me-1"></i>Get Camera Info
+                        </button>
+                        <button type="submit" class="btn btn-primary flex-grow-1" id="downloadBtn">
+                            <i class="bi bi-download me-1"></i>Download Log & Analyze
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-question-circle me-2"></i>Help</h5>
+            </div>
+            <div class="card-body">
+                <h6>Prerequisites</h6>
+                <ul class="small mb-3">
+                    <li>Connect your computer to the camera's WiFi network</li>
+                    <li>Make sure SSH is enabled on the camera</li>
+                    <li>Know the camera's IP address (usually 192.168.50.1)</li>
+                </ul>
+
+                <h6>Common Log Locations</h6>
+                <ul class="small mb-3">
+                    <li><code>/var/log/messages</code> - Main system log</li>
+                    <li><code>/var/log/syslog</code> - System messages</li>
+                    <li><code>/var/log/kern.log</code> - Kernel messages</li>
+                    <li><code>/var/log/dmesg</code> - Boot messages</li>
+                </ul>
+
+                <h6>Troubleshooting</h6>
+                <ul class="small mb-0">
+                    <li><strong>Connection timeout:</strong> Check WiFi connection to camera</li>
+                    <li><strong>Auth failed:</strong> Verify username/password</li>
+                    <li><strong>File not found:</strong> Check the log file path</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-lightning-charge me-2"></i>Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('main.upload') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-upload me-1"></i>Upload File Instead
+                    </a>
+                    <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-house me-1"></i>Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let isLoading = false;
+
+function getFormData() {
+    return {
+        camera_ip: document.getElementById('camera_ip').value,
+        username: document.getElementById('username').value,
+        password: document.getElementById('password').value,
+        port: document.getElementById('port').value
+    };
+}
+
+function showStatus(message, type) {
+    const statusEl = document.getElementById('connectionStatus');
+    statusEl.className = `alert alert-${type}`;
+    statusEl.innerHTML = message;
+    statusEl.classList.remove('d-none');
+}
+
+function hideStatus() {
+    document.getElementById('connectionStatus').classList.add('d-none');
+}
+
+function setButtonsLoading(loading) {
+    isLoading = loading;
+    const buttons = document.querySelectorAll('.btn-outline-secondary, .btn-outline-info');
+    buttons.forEach(btn => {
+        btn.disabled = loading;
+    });
+}
+
+function testConnection() {
+    if (isLoading) return;
+    const data = getFormData();
+    setButtonsLoading(true);
+    showStatus('<i class="bi bi-hourglass-split me-2"></i>Testing connection...', 'info');
+
+    const formData = new FormData();
+    Object.keys(data).forEach(key => formData.append(key, data[key]));
+
+    fetch('{{ url_for("main.camera_test") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(result => {
+        setButtonsLoading(false);
+        if (result.success) {
+            showStatus('<i class="bi bi-check-circle me-2"></i>' + result.message, 'success');
+        } else {
+            showStatus('<i class="bi bi-x-circle me-2"></i>' + result.message, 'danger');
+        }
+    })
+    .catch(error => {
+        setButtonsLoading(false);
+        showStatus('<i class="bi bi-x-circle me-2"></i>Connection test failed: ' + error.message, 'danger');
+    });
+}
+
+function getCameraInfo() {
+    if (isLoading) return;
+    const data = getFormData();
+    setButtonsLoading(true);
+    showStatus('<i class="bi bi-hourglass-split me-2"></i>Getting camera info...', 'info');
+
+    const formData = new FormData();
+    Object.keys(data).forEach(key => formData.append(key, data[key]));
+
+    fetch('{{ url_for("main.camera_info") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(result => {
+        setButtonsLoading(false);
+        if (result.success) {
+            hideStatus();
+            const panel = document.getElementById('cameraInfoPanel');
+            const content = document.getElementById('cameraInfoContent');
+
+            let html = '<table class="table table-sm table-borderless mb-0">';
+            if (result.info.hostname) html += `<tr><td><strong>Hostname:</strong></td><td>${result.info.hostname}</td></tr>`;
+            if (result.info.kernel) html += `<tr><td><strong>Kernel:</strong></td><td>${result.info.kernel}</td></tr>`;
+            if (result.info.uptime) html += `<tr><td><strong>Uptime:</strong></td><td>${result.info.uptime}</td></tr>`;
+            if (result.info.memory) html += `<tr><td><strong>Memory:</strong></td><td>${result.info.memory}</td></tr>`;
+            if (result.info.disk_usage) html += `<tr><td><strong>Disk:</strong></td><td>${result.info.disk_usage}</td></tr>`;
+            html += '</table>';
+
+            content.innerHTML = html;
+            panel.classList.remove('d-none');
+        } else {
+            showStatus('<i class="bi bi-x-circle me-2"></i>' + result.message, 'danger');
+        }
+    })
+    .catch(error => {
+        setButtonsLoading(false);
+        showStatus('<i class="bi bi-x-circle me-2"></i>Failed to get camera info: ' + error.message, 'danger');
+    });
+}
+
+function browseLogFiles() {
+    if (isLoading) return;
+    const data = getFormData();
+    setButtonsLoading(true);
+    showStatus('<i class="bi bi-hourglass-split me-2"></i>Browsing log files...', 'info');
+
+    const formData = new FormData();
+    Object.keys(data).forEach(key => formData.append(key, data[key]));
+    formData.append('directory', '/var/log');
+
+    fetch('{{ url_for("main.camera_list_logs") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(result => {
+        setButtonsLoading(false);
+        if (result.success) {
+            hideStatus();
+            const panel = document.getElementById('logFilesPanel');
+            const list = document.getElementById('logFilesList');
+
+            if (result.files.length === 0) {
+                list.innerHTML = '<div class="list-group-item text-muted">No log files found</div>';
+            } else {
+                let html = '';
+                result.files.forEach(file => {
+                    const sizeKB = (file.size / 1024).toFixed(1);
+                    html += `
+                        <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                           onclick="selectLogFile('${file.path}'); return false;">
+                            <div>
+                                <i class="bi bi-file-text me-2"></i>${file.name}
+                                <small class="text-muted d-block">${file.path}</small>
+                            </div>
+                            <span class="badge bg-secondary">${sizeKB} KB</span>
+                        </a>
+                    `;
+                });
+                list.innerHTML = html;
+            }
+
+            panel.classList.remove('d-none');
+        } else {
+            showStatus('<i class="bi bi-x-circle me-2"></i>' + result.message, 'danger');
+        }
+    })
+    .catch(error => {
+        setButtonsLoading(false);
+        showStatus('<i class="bi bi-x-circle me-2"></i>Failed to browse files: ' + error.message, 'danger');
+    });
+}
+
+function selectLogFile(path) {
+    document.getElementById('log_path').value = path;
+    document.getElementById('logFilesPanel').classList.add('d-none');
+    showStatus('<i class="bi bi-check me-2"></i>Selected: ' + path, 'success');
+}
+
+// Form submission loading state
+document.getElementById('downloadForm').addEventListener('submit', function() {
+    const btn = document.getElementById('downloadBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Downloading...';
+});
+</script>
+{% endblock %}

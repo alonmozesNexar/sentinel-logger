@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Log Analyzer{% endblock %}</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --critical-color: #7c3aed;
+        }
+
+        body {
+            background: #f8fafc;
+            min-height: 100vh;
+        }
+
+        /* Simple Navigation */
+        .simple-nav {
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            padding: 1rem 0;
+        }
+
+        .simple-nav .brand {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        .simple-nav .nav-link {
+            color: #64748b;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        .simple-nav .nav-link:hover,
+        .simple-nav .nav-link.active {
+            color: var(--primary-color);
+            background: #f1f5f9;
+        }
+
+        /* Main Content */
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+
+        /* Upload Zone */
+        .upload-zone {
+            border: 3px dashed #cbd5e1;
+            border-radius: 1rem;
+            padding: 3rem;
+            text-align: center;
+            background: white;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .upload-zone:hover,
+        .upload-zone.dragover {
+            border-color: var(--primary-color);
+            background: #f0f9ff;
+        }
+
+        .upload-zone .icon {
+            font-size: 4rem;
+            color: #94a3b8;
+            margin-bottom: 1rem;
+        }
+
+        .upload-zone:hover .icon {
+            color: var(--primary-color);
+        }
+
+        /* Issue Cards */
+        .issue-card {
+            background: white;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-left: 4px solid #e2e8f0;
+            transition: all 0.2s;
+        }
+
+        .issue-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+
+        .issue-card.critical {
+            border-left-color: var(--critical-color);
+            background: linear-gradient(to right, #faf5ff, white);
+        }
+
+        .issue-card.high {
+            border-left-color: var(--danger-color);
+            background: linear-gradient(to right, #fef2f2, white);
+        }
+
+        .issue-card.medium {
+            border-left-color: var(--warning-color);
+            background: linear-gradient(to right, #fffbeb, white);
+        }
+
+        .issue-card.low {
+            border-left-color: var(--success-color);
+            background: linear-gradient(to right, #f0fdf4, white);
+        }
+
+        /* Severity Badges */
+        .severity-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 2rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .severity-badge.critical {
+            background: var(--critical-color);
+            color: white;
+        }
+
+        .severity-badge.high {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .severity-badge.medium {
+            background: var(--warning-color);
+            color: #78350f;
+        }
+
+        .severity-badge.low {
+            background: var(--success-color);
+            color: white;
+        }
+
+        /* What This Means Section */
+        .explanation-box {
+            background: #f8fafc;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+
+        .explanation-box h6 {
+            color: #475569;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .explanation-box p {
+            margin: 0;
+            color: #334155;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        /* Action Buttons */
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+
+        .action-btn.primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .action-btn.primary:hover {
+            background: #4338ca;
+        }
+
+        .action-btn.secondary {
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+        .action-btn.secondary:hover {
+            background: #e2e8f0;
+        }
+
+        .action-btn.success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        /* Stats Cards */
+        .stat-card {
+            background: white;
+            border-radius: 1rem;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .stat-card .number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .stat-card .label {
+            color: #64748b;
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+        }
+
+        .stat-card.critical .number { color: var(--critical-color); }
+        .stat-card.high .number { color: var(--danger-color); }
+        .stat-card.medium .number { color: var(--warning-color); }
+        .stat-card.low .number { color: var(--success-color); }
+
+        /* File Card */
+        .file-card {
+            background: white;
+            border-radius: 1rem;
+            padding: 1.25rem;
+            margin-bottom: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            transition: all 0.2s;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .file-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+            color: inherit;
+        }
+
+        .file-card .file-icon {
+            width: 48px;
+            height: 48px;
+            background: #f1f5f9;
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: #64748b;
+        }
+
+        .file-card .file-info {
+            flex: 1;
+        }
+
+        .file-card .file-name {
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 0.25rem;
+        }
+
+        .file-card .file-meta {
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
+
+        .file-card .file-issues {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .file-card .issue-count {
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .file-card .issue-count.critical {
+            background: #faf5ff;
+            color: var(--critical-color);
+        }
+
+        .file-card .issue-count.high {
+            background: #fef2f2;
+            color: var(--danger-color);
+        }
+
+        /* Copy Button */
+        .copy-btn {
+            position: relative;
+        }
+
+        .copy-btn.copied::after {
+            content: 'Copied!';
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e293b;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            animation: fadeOut 2s forwards;
+        }
+
+        @keyframes fadeOut {
+            0%, 70% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        /* Developer Report Box */
+        .dev-report-box {
+            background: #1e293b;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.85rem;
+            color: #e2e8f0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .dev-report-box .label {
+            color: #94a3b8;
+        }
+
+        .dev-report-box .value {
+            color: #fbbf24;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+
+        .empty-state .icon {
+            font-size: 5rem;
+            color: #cbd5e1;
+            margin-bottom: 1.5rem;
+        }
+
+        .empty-state h3 {
+            color: #475569;
+            margin-bottom: 0.5rem;
+        }
+
+        .empty-state p {
+            color: #94a3b8;
+            max-width: 400px;
+            margin: 0 auto 1.5rem;
+        }
+
+        /* Progress indicator */
+        .analyzing-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 1rem;
+            background: #f0f9ff;
+            border-radius: 0.5rem;
+            color: var(--primary-color);
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid #e0e7ff;
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Suggested Actions */
+        .action-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: #f8fafc;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .action-item i {
+            color: var(--primary-color);
+            margin-top: 0.125rem;
+        }
+
+        .action-item span {
+            color: #475569;
+            font-size: 0.9rem;
+        }
+
+        /* Section Header */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+        }
+
+        .section-header h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1e293b;
+            margin: 0;
+        }
+
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            z-index: 1050;
+        }
+
+        {% block extra_css %}{% endblock %}
+    </style>
+</head>
+<body>
+    <!-- Simple Navigation -->
+    <nav class="simple-nav">
+        <div class="container-fluid px-4">
+            <div class="d-flex align-items-center justify-content-between">
+                <a href="{{ url_for('main.index') }}" class="brand">
+                    <i class="bi bi-shield-check me-2"></i>Log Analyzer
+                </a>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="{{ url_for('main.index') }}" class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}">
+                        <i class="bi bi-house me-1"></i>Home
+                    </a>
+                    <a href="{{ url_for('main.upload') }}" class="nav-link {% if request.endpoint == 'main.upload' %}active{% endif %}">
+                        <i class="bi bi-upload me-1"></i>Upload
+                    </a>
+                    <a href="{{ url_for('main.issues_list') }}" class="nav-link {% if request.endpoint == 'main.issues_list' %}active{% endif %}">
+                        <i class="bi bi-exclamation-triangle me-1"></i>Issues
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="container-fluid px-4 mt-3">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else 'success' if category == 'success' else 'info' }} alert-dismissible fade show" role="alert">
+                        <i class="bi bi-{% if category == 'error' %}exclamation-circle{% elif category == 'success' %}check-circle{% else %}info-circle{% endif %} me-2"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Main Content -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+    // Show toast notification
+    function showToast(message, type = 'success') {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = `toast align-items-center text-white bg-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'primary'} border-0 show`;
+        toast.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        `;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+    // Copy to clipboard
+    function copyToClipboard(text, btn) {
+        navigator.clipboard.writeText(text).then(() => {
+            btn.classList.add('copied');
+            setTimeout(() => btn.classList.remove('copied'), 2000);
+            showToast('Copied to clipboard!');
+        });
+    }
+
+    // Generate developer report
+    function generateDevReport(issue) {
+        return `=== BUG REPORT ===
+Title: ${issue.title}
+Severity: ${issue.severity}
+Category: ${issue.category}
+
+DESCRIPTION:
+${issue.description}
+
+FIRST OCCURRENCE: ${issue.first_occurrence}
+LAST OCCURRENCE: ${issue.last_occurrence}
+OCCURRENCE COUNT: ${issue.occurrence_count}
+
+AFFECTED LINES: ${issue.affected_lines.join(', ')}
+
+LOG CONTEXT:
+${issue.log_context || 'See attached log file'}
+
+ADDITIONAL NOTES:
+- Confidence Score: ${(issue.confidence_score * 100).toFixed(0)}%
+- Status: ${issue.status}
+- Log File ID: ${issue.log_file_id}
+
+Generated by Log Analyzer`;
+    }
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

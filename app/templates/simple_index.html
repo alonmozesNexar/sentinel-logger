@@ -1,0 +1,143 @@
+{% extends "simple_base.html" %}
+
+{% block title %}Log Analyzer - Home{% endblock %}
+
+{% block content %}
+<!-- Upload Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <form action="{{ url_for('main.upload') }}" method="post" enctype="multipart/form-data" id="uploadForm">
+            <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+                <input type="file" name="file" id="fileInput" accept=".log,.txt,.gz,.zip" style="display: none">
+                <i class="bi bi-cloud-arrow-up icon"></i>
+                <h4>Drop your log file here</h4>
+                <p class="text-muted mb-3">or click to browse</p>
+                <p class="text-muted small">Supports .log, .txt, .gz, .zip files up to 500MB</p>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Stats Overview -->
+{% if log_files %}
+<div class="row mb-4 g-3">
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="number">{{ log_files|length }}</div>
+            <div class="label">Log Files</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card critical">
+            <div class="number">{{ critical_issues }}</div>
+            <div class="label">Critical Issues</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card high">
+            <div class="number">{{ total_errors }}</div>
+            <div class="label">Errors</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card medium">
+            <div class="number">{{ total_warnings }}</div>
+            <div class="label">Warnings</div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Files -->
+<div class="section-header">
+    <h2><i class="bi bi-clock-history me-2"></i>Recent Log Files</h2>
+    {% if log_files|length > 5 %}
+    <a href="{{ url_for('main.issues_list') }}" class="action-btn secondary">
+        View All Issues <i class="bi bi-arrow-right"></i>
+    </a>
+    {% endif %}
+</div>
+
+<div class="row">
+    <div class="col-12">
+        {% for file in log_files[:10] %}
+        <a href="{{ url_for('main.analyze', file_id=file.id) }}" class="file-card">
+            <div class="file-icon">
+                <i class="bi bi-file-text"></i>
+            </div>
+            <div class="file-info">
+                <div class="file-name">{{ file.original_filename }}</div>
+                <div class="file-meta">
+                    {{ (file.file_size / 1024)|round(1) }} KB
+                    &bull; {{ file.total_lines|default(0) }} lines
+                    &bull; {{ file.upload_date.strftime('%b %d, %H:%M') if file.upload_date else 'Just now' }}
+                </div>
+            </div>
+            <div class="file-issues">
+                {% if file.error_count > 0 %}
+                <span class="issue-count high">{{ file.error_count }} errors</span>
+                {% endif %}
+                {% if file.warning_count > 0 %}
+                <span class="issue-count" style="background: #fffbeb; color: #b45309;">{{ file.warning_count }} warnings</span>
+                {% endif %}
+                {% if file.error_count == 0 and file.warning_count == 0 %}
+                <span class="issue-count" style="background: #f0fdf4; color: #15803d;">
+                    <i class="bi bi-check-circle me-1"></i>Clean
+                </span>
+                {% endif %}
+            </div>
+            <i class="bi bi-chevron-right text-muted"></i>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+
+{% else %}
+<!-- Empty State -->
+<div class="empty-state">
+    <i class="bi bi-file-earmark-plus icon"></i>
+    <h3>No log files yet</h3>
+    <p>Upload your first camera log file to start finding issues automatically</p>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Drag and drop functionality
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+const uploadForm = document.getElementById('uploadForm');
+
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    uploadZone.addEventListener(eventName, preventDefaults, false);
+});
+
+function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+['dragenter', 'dragover'].forEach(eventName => {
+    uploadZone.addEventListener(eventName, () => uploadZone.classList.add('dragover'), false);
+});
+
+['dragleave', 'drop'].forEach(eventName => {
+    uploadZone.addEventListener(eventName, () => uploadZone.classList.remove('dragover'), false);
+});
+
+uploadZone.addEventListener('drop', (e) => {
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        fileInput.files = files;
+        uploadForm.submit();
+    }
+});
+
+fileInput.addEventListener('change', () => {
+    if (fileInput.files.length > 0) {
+        uploadForm.submit();
+    }
+});
+</script>
+{% endblock %}

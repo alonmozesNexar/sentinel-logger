@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}Charts - {{ log_file.original_filename }} - Sentinel Logger{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('main.analyze', file_id=log_file.id) }}">{{ log_file.original_filename }}</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Charts</li>
+            </ol>
+        </nav>
+        <h1 class="h3">
+            <i class="bi bi-bar-chart me-2"></i>Log Visualization
+        </h1>
+        <p class="text-muted">Visual analysis of {{ log_file.original_filename }}</p>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4" id="summaryCards">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body text-center">
+                <h3 id="totalEntries">-</h3>
+                <small>Total Entries</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-danger text-white">
+            <div class="card-body text-center">
+                <h3 id="errorCount">-</h3>
+                <small>Errors</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-dark">
+            <div class="card-body text-center">
+                <h3 id="warningCount">-</h3>
+                <small>Warnings</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center">
+                <h3 id="errorRate">-</h3>
+                <small>Error Rate</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row 1 -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i>Severity Distribution</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="severityChart" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Errors Over Time</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="timelineChart" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row 2 -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Errors by Service</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="serviceChart" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-clock me-2"></i>Errors by Hour</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="hourlyChart" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row 3 -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-tags me-2"></i>Issue Categories</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="categoryChart" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Analysis Summary</h5>
+            </div>
+            <div class="card-body" id="analysisSummary">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Loading analysis...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Chart instances
+    let severityChart, timelineChart, serviceChart, hourlyChart, categoryChart;
+
+    // Fetch chart data
+    fetch('/api/log-files/{{ log_file.id }}/charts')
+        .then(response => response.json())
+        .then(data => {
+            updateSummaryCards(data.summary);
+            createSeverityChart(data.severity_distribution);
+            createTimelineChart(data.errors_timeline);
+            createServiceChart(data.service_distribution);
+            createHourlyChart(data.hourly_distribution);
+            createCategoryChart(data.issue_categories);
+            updateAnalysisSummary(data.summary);
+        })
+        .catch(error => {
+            console.error('Error loading chart data:', error);
+        });
+
+    function updateSummaryCards(summary) {
+        document.getElementById('totalEntries').textContent = summary.total_entries.toLocaleString();
+        document.getElementById('errorCount').textContent = summary.error_count.toLocaleString();
+        document.getElementById('warningCount').textContent = summary.warning_count.toLocaleString();
+        document.getElementById('errorRate').textContent = summary.error_rate + '%';
+    }
+
+    function createSeverityChart(data) {
+        const ctx = document.getElementById('severityChart').getContext('2d');
+        severityChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    }
+                }
+            }
+        });
+    }
+
+    function createTimelineChart(data) {
+        const ctx = document.getElementById('timelineChart').getContext('2d');
+        timelineChart = new Chart(ctx, {
+            type: 'line',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    }
+                }
+            }
+        });
+    }
+
+    function createServiceChart(data) {
+        const ctx = document.getElementById('serviceChart').getContext('2d');
+        serviceChart = new Chart(ctx, {
+            type: 'bar',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    }
+                }
+            }
+        });
+    }
+
+    function createHourlyChart(data) {
+        const ctx = document.getElementById('hourlyChart').getContext('2d');
+        hourlyChart = new Chart(ctx, {
+            type: 'bar',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    function createCategoryChart(data) {
+        const ctx = document.getElementById('categoryChart').getContext('2d');
+        categoryChart = new Chart(ctx, {
+            type: 'bar',
+            data: data,
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    function updateAnalysisSummary(summary) {
+        let timeInfo = '';
+        if (summary.time_range) {
+            timeInfo = `
+                <p><strong>Time Range:</strong></p>
+                <p class="small text-muted">
+                    Start: ${summary.time_range.start}<br>
+                    End: ${summary.time_range.end}<br>
+                    Duration: ${summary.time_range.duration_hours} hours
+                </p>
+            `;
+        }
+
+        document.getElementById('analysisSummary').innerHTML = `
+            <div class="row">
+                <div class="col-6">
+                    <h6>Entry Counts</h6>
+                    <ul class="list-unstyled">
+                        <li><span class="badge bg-dark me-2">${summary.severity_counts.CRITICAL || 0}</span> Critical</li>
+                        <li><span class="badge bg-danger me-2">${summary.severity_counts.ERROR || 0}</span> Error</li>
+                        <li><span class="badge bg-warning text-dark me-2">${summary.severity_counts.WARNING || 0}</span> Warning</li>
+                        <li><span class="badge bg-info me-2">${summary.severity_counts.INFO || 0}</span> Info</li>
+                        <li><span class="badge bg-secondary me-2">${summary.severity_counts.DEBUG || 0}</span> Debug</li>
+                    </ul>
+                </div>
+                <div class="col-6">
+                    <h6>Issues Detected</h6>
+                    <ul class="list-unstyled">
+                        <li><strong>${summary.total_issues}</strong> Total Issues</li>
+                        <li><span class="badge bg-dark me-2">${summary.critical_issues}</span> Critical</li>
+                        <li><span class="badge bg-danger me-2">${summary.high_issues}</span> High</li>
+                    </ul>
+                    ${timeInfo}
+                </div>
+            </div>
+        `;
+    }
+</script>
+{% endblock %}

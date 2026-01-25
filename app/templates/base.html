@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Sentinel Logger{% endblock %}</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- Custom CSS -->
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('main.index') }}">
+                <i class="bi bi-shield-check me-2"></i>Sentinel Logger
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.index') }}">
+                            <i class="bi bi-speedometer2 me-1"></i>Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.upload') }}">
+                            <i class="bi bi-upload me-1"></i>Upload
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.issues_list') }}">
+                            <i class="bi bi-exclamation-triangle me-1"></i>Issues
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.compare') }}">
+                            <i class="bi bi-arrow-left-right me-1"></i>Compare
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-bug me-1"></i>Bug Reports
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('main.bug_reports_list') }}">
+                                <i class="bi bi-list-ul me-2"></i>All Reports
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('main.create_jira_bug') }}">
+                                <i class="bi bi-box-arrow-up-right me-2"></i>Create Jira Bug
+                            </a></li>
+                        </ul>
+                    </li>
+                </ul>
+                <!-- System Stats Widgets (compact navbar version) -->
+                <div class="d-none d-lg-flex align-items-center me-3 system-stats-navbar" id="navbar-system-stats">
+                    <span class="badge bg-secondary text-light me-2" id="navbar-cpu" title="CPU Usage">
+                        <small class="opacity-75 me-1">CPU</small><span id="navbar-cpu-value">--%</span>
+                    </span>
+                    <span class="badge bg-secondary text-light me-2" id="navbar-mem" title="Memory Usage">
+                        <small class="opacity-75 me-1">MEM</small><span id="navbar-mem-value">--%</span>
+                    </span>
+                    <span class="badge bg-secondary text-light" id="navbar-net" title="Network Speed">
+                        <small class="opacity-75 me-1">NET</small>
+                        <i class="bi bi-arrow-down-short"></i><span id="navbar-net-down">--</span>
+                        <i class="bi bi-arrow-up-short ms-1"></i><span id="navbar-net-up">--</span>
+                    </span>
+                </div>
+                <form class="d-flex me-3" action="{{ url_for('api.search_logs') }}" method="get">
+                    <div class="input-group">
+                        <input class="form-control" type="search" name="q" placeholder="Search logs..." aria-label="Search">
+                        <button class="btn btn-outline-light" type="submit">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                </form>
+                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
+                    <i class="bi bi-moon-fill" id="themeIcon"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Messages -->
+    <div class="container-fluid mt-5 pt-3">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <!-- Main Content -->
+    <main class="container-fluid py-3">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer mt-auto py-3 bg-light">
+        <div class="container-fluid text-center">
+            <span class="text-muted">Sentinel Logger - Helping QA testers find issues faster</span>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    <!-- Command Palette Modal -->
+    <div class="modal fade" id="commandPaletteModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 12px; overflow: hidden;">
+                <div class="modal-body p-0">
+                    <div class="command-palette-search">
+                        <i class="bi bi-search command-palette-icon"></i>
+                        <input type="text" id="commandPaletteInput" class="command-palette-input"
+                               placeholder="Type a command or search..." autocomplete="off">
+                        <kbd class="command-palette-esc">ESC</kbd>
+                    </div>
+                    <div class="command-palette-results" id="commandPaletteResults">
+                        <!-- Results populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+    /* Command Palette Styles */
+    .command-palette-search {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-color, #dee2e6);
+        background: var(--bg-secondary, #fff);
+    }
+
+    .command-palette-icon {
+        font-size: 1.2rem;
+        color: var(--text-muted, #6c757d);
+        margin-right: 12px;
+    }
+
+    .command-palette-input {
+        flex: 1;
+        border: none;
+        outline: none;
+        font-size: 1.1rem;
+        background: transparent;
+        color: var(--text-primary, #212529);
+    }
+
+    .command-palette-input::placeholder {
+        color: var(--text-muted, #adb5bd);
+    }
+
+    .command-palette-esc {
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        background: var(--bg-tertiary, #e9ecef);
+        border-radius: 4px;
+        color: var(--text-muted, #6c757d);
+    }
+
+    .command-palette-results {
+        max-height: 400px;
+        overflow-y: auto;
+        background: var(--bg-secondary, #fff);
+    }
+
+    .command-palette-item {
+        display: flex;
+        align-items: center;
+        padding: 10px 16px;
+        cursor: pointer;
+        transition: background 0.15s;
+        border-bottom: 1px solid var(--border-color, #f1f1f1);
+    }
+
+    .command-palette-item:hover,
+    .command-palette-item.selected {
+        background: var(--bg-tertiary, #f8f9fa);
+    }
+
+    .command-palette-item.selected {
+        background: rgba(59, 130, 246, 0.1);
+    }
+
+    .command-palette-item-icon {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        margin-right: 12px;
+        font-size: 1rem;
+    }
+
+    .command-palette-item-icon.nav { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+    .command-palette-item-icon.action { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+    .command-palette-item-icon.file { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+    .command-palette-item-icon.theme { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
+
+    .command-palette-item-info {
+        flex: 1;
+    }
+
+    .command-palette-item-title {
+        font-weight: 500;
+        color: var(--text-primary, #212529);
+    }
+
+    .command-palette-item-desc {
+        font-size: 0.8rem;
+        color: var(--text-muted, #6c757d);
+    }
+
+    .command-palette-item-shortcut {
+        display: flex;
+        gap: 4px;
+    }
+
+    .command-palette-item-shortcut kbd {
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        background: var(--bg-tertiary, #e9ecef);
+        border-radius: 4px;
+        color: var(--text-muted, #6c757d);
+    }
+
+    .command-palette-section {
+        padding: 8px 16px 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--text-muted, #6c757d);
+        background: var(--bg-tertiary, #f8f9fa);
+    }
+
+    .command-palette-empty {
+        padding: 30px;
+        text-align: center;
+        color: var(--text-muted, #6c757d);
+    }
+
+    /* Dark mode */
+    [data-theme="dark"] .command-palette-search {
+        background: #1f2937;
+        border-color: #374151;
+    }
+
+    [data-theme="dark"] .command-palette-results {
+        background: #1f2937;
+    }
+
+    [data-theme="dark"] .command-palette-item {
+        border-color: #374151;
+    }
+
+    [data-theme="dark"] .command-palette-item:hover,
+    [data-theme="dark"] .command-palette-item.selected {
+        background: #374151;
+    }
+
+    [data-theme="dark"] .command-palette-section {
+        background: #111827;
+    }
+
+    [data-theme="dark"] kbd {
+        background: #374151;
+        color: #9ca3af;
+    }
+    </style>
+
+    <script>
+    // ============================================
+    // Command Palette (Ctrl+K or Cmd+K)
+    // ============================================
+    const commandPaletteCommands = [
+        // Navigation
+        { type: 'nav', icon: 'bi-speedometer2', title: 'Go to Dashboard', desc: 'View all log files', action: () => window.location.href = '{{ url_for("main.index") }}', shortcut: '' },
+        { type: 'nav', icon: 'bi-upload', title: 'Upload Log File', desc: 'Upload new log files for analysis', action: () => window.location.href = '{{ url_for("main.upload") }}', shortcut: '' },
+        { type: 'nav', icon: 'bi-exclamation-triangle', title: 'View Issues', desc: 'See all detected issues', action: () => window.location.href = '{{ url_for("main.issues_list") }}', shortcut: '' },
+        { type: 'nav', icon: 'bi-bug', title: 'Bug Reports', desc: 'View and manage bug reports', action: () => window.location.href = '{{ url_for("main.bug_reports_list") }}', shortcut: '' },
+        { type: 'nav', icon: 'bi-arrow-left-right', title: 'Compare Logs', desc: 'Compare two log files side by side', action: () => window.location.href = '{{ url_for("main.compare") }}', shortcut: '' },
+        { type: 'nav', icon: 'bi-box-arrow-up-right', title: 'Create Jira Bug', desc: 'Create a new Jira bug report', action: () => window.location.href = '{{ url_for("main.create_jira_bug") }}', shortcut: '' },
+
+        // Actions
+        { type: 'action', icon: 'bi-search', title: 'Search Logs', desc: 'Search across all log files', action: () => document.querySelector('input[name="q"]')?.focus(), shortcut: 'Ctrl+/' },
+        { type: 'theme', icon: 'bi-moon', title: 'Toggle Dark Mode', desc: 'Switch between light and dark theme', action: () => toggleTheme(), shortcut: '' },
+
+        // File actions (if on a file page)
+        { type: 'file', icon: 'bi-download', title: 'Export as CSV', desc: 'Download current log as CSV', action: () => { if (window.analysisData) window.location.href = `/api/log-files/${window.analysisData.fileId}/export/csv`; }, shortcut: '' },
+        { type: 'file', icon: 'bi-filetype-json', title: 'Export as JSON', desc: 'Download current log as JSON', action: () => { if (window.analysisData) window.location.href = `/api/log-files/${window.analysisData.fileId}/export/json`; }, shortcut: '' },
+        { type: 'file', icon: 'bi-file-pdf', title: 'Export as PDF', desc: 'Download current log as PDF', action: () => { if (window.analysisData) window.location.href = `/api/log-files/${window.analysisData.fileId}/export/pdf`; }, shortcut: '' },
+    ];
+
+    let commandPaletteSelectedIndex = 0;
+    let commandPaletteFiltered = [];
+
+    function initCommandPalette() {
+        const modal = document.getElementById('commandPaletteModal');
+        const input = document.getElementById('commandPaletteInput');
+        const results = document.getElementById('commandPaletteResults');
+
+        if (!modal || !input || !results) return;
+
+        // Filter commands on input
+        input.addEventListener('input', () => {
+            const query = input.value.toLowerCase().trim();
+            filterCommands(query);
+        });
+
+        // Keyboard navigation
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                commandPaletteSelectedIndex = Math.min(commandPaletteSelectedIndex + 1, commandPaletteFiltered.length - 1);
+                updateCommandPaletteSelection();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                commandPaletteSelectedIndex = Math.max(commandPaletteSelectedIndex - 1, 0);
+                updateCommandPaletteSelection();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                executeSelectedCommand();
+            }
+        });
+
+        // Reset on modal show
+        modal.addEventListener('show.bs.modal', () => {
+            input.value = '';
+            commandPaletteSelectedIndex = 0;
+            filterCommands('');
+            setTimeout(() => input.focus(), 100);
+        });
+    }
+
+    function filterCommands(query) {
+        const results = document.getElementById('commandPaletteResults');
+        if (!results) return;
+
+        if (query === '') {
+            commandPaletteFiltered = commandPaletteCommands;
+        } else {
+            commandPaletteFiltered = commandPaletteCommands.filter(cmd =>
+                cmd.title.toLowerCase().includes(query) ||
+                cmd.desc.toLowerCase().includes(query)
+            );
+        }
+
+        commandPaletteSelectedIndex = 0;
+        renderCommandPaletteResults();
+    }
+
+    function renderCommandPaletteResults() {
+        const results = document.getElementById('commandPaletteResults');
+        if (!results) return;
+
+        if (commandPaletteFiltered.length === 0) {
+            results.innerHTML = `
+                <div class="command-palette-empty">
+                    <i class="bi bi-search fs-1 opacity-50"></i>
+                    <p class="mt-2 mb-0">No commands found</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Group by type
+        const groups = {};
+        commandPaletteFiltered.forEach((cmd, index) => {
+            if (!groups[cmd.type]) groups[cmd.type] = [];
+            groups[cmd.type].push({ ...cmd, index });
+        });
+
+        const groupLabels = {
+            nav: 'Navigation',
+            action: 'Actions',
+            file: 'File Operations',
+            theme: 'Settings'
+        };
+
+        let html = '';
+        Object.keys(groups).forEach(type => {
+            html += `<div class="command-palette-section">${groupLabels[type] || type}</div>`;
+            groups[type].forEach(cmd => {
+                const isSelected = cmd.index === commandPaletteSelectedIndex;
+                html += `
+                    <div class="command-palette-item ${isSelected ? 'selected' : ''}"
+                         data-index="${cmd.index}"
+                         onclick="executeCommand(${cmd.index})">
+                        <div class="command-palette-item-icon ${cmd.type}">
+                            <i class="${cmd.icon}"></i>
+                        </div>
+                        <div class="command-palette-item-info">
+                            <div class="command-palette-item-title">${cmd.title}</div>
+                            <div class="command-palette-item-desc">${cmd.desc}</div>
+                        </div>
+                        ${cmd.shortcut ? `<div class="command-palette-item-shortcut"><kbd>${cmd.shortcut}</kbd></div>` : ''}
+                    </div>
+                `;
+            });
+        });
+
+        results.innerHTML = html;
+    }
+
+    function updateCommandPaletteSelection() {
+        const items = document.querySelectorAll('.command-palette-item');
+        items.forEach((item, index) => {
+            item.classList.toggle('selected', parseInt(item.dataset.index) === commandPaletteSelectedIndex);
+        });
+
+        // Scroll into view
+        const selected = document.querySelector('.command-palette-item.selected');
+        if (selected) {
+            selected.scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    function executeCommand(index) {
+        const cmd = commandPaletteFiltered[index];
+        if (cmd && cmd.action) {
+            // Close modal first
+            const modal = bootstrap.Modal.getInstance(document.getElementById('commandPaletteModal'));
+            if (modal) modal.hide();
+
+            // Execute after a tiny delay to let modal close
+            setTimeout(() => cmd.action(), 100);
+        }
+    }
+
+    function executeSelectedCommand() {
+        if (commandPaletteFiltered.length > 0) {
+            executeCommand(commandPaletteSelectedIndex);
+        }
+    }
+
+    function openCommandPalette() {
+        const modal = new bootstrap.Modal(document.getElementById('commandPaletteModal'));
+        modal.show();
+    }
+
+    // Global keyboard shortcut: Ctrl+K or Cmd+K
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            openCommandPalette();
+        }
+    });
+
+    // Initialize on DOM ready
+    document.addEventListener('DOMContentLoaded', initCommandPalette);
+    </script>
+
+    <!-- Navbar System Stats Script -->
+    <script>
+    (function() {
+        const REFRESH_INTERVAL = 5000; // 5 seconds
+        let navbarStatsInterval = null;
+
+        // DOM Elements
+        const cpuValue = document.getElementById('navbar-cpu-value');
+        const cpuBadge = document.getElementById('navbar-cpu');
+        const memValue = document.getElementById('navbar-mem-value');
+        const memBadge = document.getElementById('navbar-mem');
+        const netDown = document.getElementById('navbar-net-down');
+        const netUp = document.getElementById('navbar-net-up');
+
+        // Helper to get badge color class based on percentage
+        function getBadgeClass(percent) {
+            if (percent < 50) return 'bg-success';
+            if (percent < 75) return 'bg-warning';
+            return 'bg-danger';
+        }
+
+        // Format network speed compactly
+        function formatSpeedCompact(bytesPerSecond) {
+            if (bytesPerSecond < 1024) {
+                return Math.round(bytesPerSecond) + 'B/s';
+            } else if (bytesPerSecond < 1024 * 1024) {
+                return Math.round(bytesPerSecond / 1024) + 'KB/s';
+            } else {
+                return (bytesPerSecond / (1024 * 1024)).toFixed(1) + 'MB/s';
+            }
+        }
+
+        // Fetch and update navbar stats
+        async function fetchNavbarStats() {
+            try {
+                const response = await fetch('/api/system/stats');
+                const data = await response.json();
+
+                if (!data.available) {
+                    // Keep showing placeholder values if not available
+                    return;
+                }
+
+                // Update CPU
+                const cpuPercent = data.cpu.percent;
+                cpuValue.textContent = cpuPercent + '%';
+                cpuBadge.className = 'badge text-light me-2 ' + getBadgeClass(cpuPercent);
+
+                // Update Memory
+                const memPercent = data.memory.percent;
+                memValue.textContent = memPercent + '%';
+                memBadge.className = 'badge text-light me-2 ' + getBadgeClass(memPercent);
+
+                // Update Network
+                netDown.textContent = formatSpeedCompact(data.network.bytes_recv_speed);
+                netUp.textContent = formatSpeedCompact(data.network.bytes_sent_speed);
+
+            } catch (error) {
+                console.error('Failed to fetch navbar system stats:', error);
+            }
+        }
+
+        // Start monitoring
+        function startNavbarStats() {
+            fetchNavbarStats(); // Initial fetch
+            navbarStatsInterval = setInterval(fetchNavbarStats, REFRESH_INTERVAL);
+        }
+
+        // Stop monitoring
+        function stopNavbarStats() {
+            if (navbarStatsInterval) {
+                clearInterval(navbarStatsInterval);
+                navbarStatsInterval = null;
+            }
+        }
+
+        // Start when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startNavbarStats);
+        } else {
+            startNavbarStats();
+        }
+
+        // Stop monitoring when page is hidden to save resources
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                stopNavbarStats();
+            } else {
+                startNavbarStats();
+            }
+        });
+    })();
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

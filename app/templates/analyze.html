@@ -1,0 +1,1172 @@
+{% extends "base.html" %}
+
+{% block title %}Analysis - {{ log_file.original_filename }} - Sentinel Logger{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Page Header */
+.page-header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+}
+
+.page-header h1 {
+    font-size: 1.25rem;
+    margin: 0;
+    font-weight: 600;
+}
+
+.page-header .file-info {
+    font-size: 0.85rem;
+    opacity: 0.8;
+    margin-top: 0.5rem;
+}
+
+.stats-row {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.stat-item.errors { color: #ff6b6b; }
+.stat-item.warnings { color: #ffd93d; }
+
+/* Quick Actions */
+.quick-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.quick-btn {
+    background: white;
+    border: 1px solid #dee2e6;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: #495057;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.quick-btn:hover {
+    background: #f8f9fa;
+}
+
+/* AI Status Bar */
+.ai-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.ai-header h2 {
+    font-size: 1rem;
+    margin: 0;
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+.ai-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.ai-engine-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: linear-gradient(135deg, #4285f4, #34a853);
+    color: white;
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.btn-icon {
+    background: #e9ecef;
+    color: #495057;
+    border: none;
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.btn-icon:hover {
+    background: #dee2e6;
+}
+
+/* Container */
+.section-container {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+}
+
+/* Loading */
+.loading-box {
+    text-align: center;
+    padding: 4rem 2rem;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid #e9ecef;
+    border-top-color: #4285f4;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1.5rem;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-box p {
+    color: #6c757d;
+    font-size: 1rem;
+}
+
+/* Summary Stats */
+.summary-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.summary-stat {
+    text-align: center;
+}
+
+.summary-stat .count {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.summary-stat .label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-top: 0.25rem;
+}
+
+.summary-stat.critical .count { color: #6f42c1; }
+.summary-stat.high .count { color: #dc3545; }
+.summary-stat.medium .count { color: #ffc107; }
+.summary-stat.low .count { color: #28a745; }
+
+/* Issue Card */
+.issue-card {
+    border-bottom: 1px solid #e9ecef;
+}
+
+.issue-card:last-child {
+    border-bottom: none;
+}
+
+.issue-header {
+    display: flex;
+    align-items: flex-start;
+    padding: 1.25rem 1.5rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    gap: 1rem;
+}
+
+.issue-header:hover {
+    background: #f8f9fa;
+}
+
+.issue-severity {
+    min-width: 80px;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    text-align: center;
+}
+
+.issue-severity.critical { background: #6f42c1; color: white; }
+.issue-severity.high { background: #dc3545; color: white; }
+.issue-severity.medium { background: #ffc107; color: #212529; }
+.issue-severity.low { background: #28a745; color: white; }
+
+.issue-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.issue-title {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #1a1a2e;
+    margin-bottom: 0.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.issue-title .emoji {
+    font-size: 1.1rem;
+}
+
+.issue-summary {
+    color: #6c757d;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.issue-toggle {
+    color: #6c757d;
+    font-size: 1.25rem;
+    transition: transform 0.2s;
+}
+
+.issue-card.expanded .issue-toggle {
+    transform: rotate(180deg);
+}
+
+/* Issue Details (Expanded) */
+.issue-details {
+    display: none;
+    padding: 0 1.5rem 1.5rem;
+    background: #fafbfc;
+    border-top: 1px solid #e9ecef;
+}
+
+.issue-card.expanded .issue-details {
+    display: block;
+}
+
+.detail-section {
+    margin-bottom: 1.25rem;
+}
+
+.detail-section:last-child {
+    margin-bottom: 0;
+}
+
+.detail-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+}
+
+.detail-content {
+    font-size: 0.9rem;
+    color: #1a1a2e;
+    line-height: 1.6;
+}
+
+/* Log Evidence */
+.log-evidence {
+    background: #1a1a2e;
+    color: #e9ecef;
+    padding: 1rem;
+    border-radius: 8px;
+    font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    overflow-x: auto;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.log-line {
+    display: flex;
+    gap: 1rem;
+    padding: 0.15rem 0;
+}
+
+.log-line:hover {
+    background: rgba(255,255,255,0.05);
+}
+
+.log-line-number {
+    color: #6c757d;
+    min-width: 50px;
+    text-align: right;
+    user-select: none;
+}
+
+.log-line-content {
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.log-line.error .log-line-content {
+    color: #ff6b6b;
+}
+
+.log-line.warning .log-line-content {
+    color: #ffd93d;
+}
+
+.log-line.highlight {
+    background: rgba(255, 107, 107, 0.2);
+    margin: 0 -1rem;
+    padding: 0.15rem 1rem;
+}
+
+/* Bug Report Actions */
+.issue-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e9ecef;
+}
+
+.btn-jira {
+    background: #0052cc;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-jira:hover {
+    background: #0747a6;
+    color: white;
+}
+
+.btn-secondary {
+    background: #e9ecef;
+    color: #495057;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-secondary:hover {
+    background: #dee2e6;
+}
+
+/* Ask AI Section */
+.ask-ai-section {
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+}
+
+.ask-ai-section h4 {
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+    color: #1a1a2e;
+}
+
+.ai-input-row {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.ai-input-row input {
+    flex: 1;
+    padding: 0.6rem 1rem;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+.ai-input-row button {
+    background: #4285f4;
+    color: white;
+    border: none;
+    padding: 0.6rem 1.25rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.ai-response-box {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: white;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    display: none;
+}
+
+/* Error State */
+.error-state {
+    text-align: center;
+    padding: 3rem;
+    color: #dc3545;
+}
+
+/* Empty Issues */
+.no-issues {
+    text-align: center;
+    padding: 3rem;
+    color: #6c757d;
+}
+
+.no-issues i {
+    font-size: 3rem;
+    opacity: 0.3;
+    margin-bottom: 1rem;
+}
+
+/* Filter Bar */
+.filter-bar {
+    padding: 1rem 1.5rem;
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.filter-bar select {
+    padding: 0.4rem 0.75rem;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    background: white;
+}
+
+.filter-bar input {
+    padding: 0.4rem 0.75rem;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    flex: 1;
+    min-width: 200px;
+}
+
+.issue-count-badge {
+    background: #e9ecef;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    color: #495057;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-start">
+        <div>
+            <h1><i class="bi bi-file-earmark-text me-2"></i>{{ log_file.original_filename }}</h1>
+            <div class="file-info">
+                Uploaded {{ log_file.upload_date.strftime('%Y-%m-%d %H:%M') if log_file.upload_date else 'Unknown' }}
+            </div>
+            <div class="stats-row">
+                <span class="stat-item"><i class="bi bi-list-ol"></i> {{ log_file.total_lines }} lines</span>
+                <span class="stat-item errors"><i class="bi bi-x-circle-fill"></i> {{ log_file.error_count }} errors</span>
+                <span class="stat-item warnings"><i class="bi bi-exclamation-triangle-fill"></i> {{ log_file.warning_count }} warnings</span>
+            </div>
+        </div>
+        <a href="{{ url_for('main.index') }}" class="btn btn-outline-light btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Back
+        </a>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="quick-actions">
+    <a href="{{ url_for('main.view_log', file_id=log_file.id) }}" class="quick-btn">
+        <i class="bi bi-terminal"></i> View Full Log
+    </a>
+    <a href="/api/log-files/{{ log_file.id }}/export/csv" class="quick-btn">
+        <i class="bi bi-download"></i> Export CSV
+    </a>
+</div>
+
+<!-- AI Analysis Section -->
+<div class="section-container">
+    <div class="ai-header">
+        <h2><i class="bi bi-robot me-2"></i>AI Analysis</h2>
+        <div class="ai-status-bar">
+            <span id="aiEngineInfo" class="ai-engine-badge">
+                <i class="bi bi-cpu"></i> <span id="aiEngineName">Loading...</span>
+            </span>
+            <button class="btn-icon" onclick="runAnalysis(true)" title="Re-analyze">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="loading-box">
+        <div class="spinner"></div>
+        <p>AI is analyzing the log file...</p>
+        <small class="text-muted">This may take a few seconds</small>
+    </div>
+
+    <!-- Summary Stats (populated by AI) -->
+    <div id="summaryStats" class="summary-stats" style="display: none;">
+        <div class="summary-stat critical">
+            <div class="count" id="criticalCount">0</div>
+            <div class="label">Critical</div>
+        </div>
+        <div class="summary-stat high">
+            <div class="count" id="highCount">0</div>
+            <div class="label">High</div>
+        </div>
+        <div class="summary-stat medium">
+            <div class="count" id="mediumCount">0</div>
+            <div class="label">Medium</div>
+        </div>
+        <div class="summary-stat low">
+            <div class="count" id="lowCount">0</div>
+            <div class="label">Low</div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div id="filterBar" class="filter-bar" style="display: none;">
+        <select id="severityFilter" onchange="filterIssues()">
+            <option value="">All Severities</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+        </select>
+        <input type="text" id="searchFilter" placeholder="Search issues..." oninput="filterIssues()">
+        <span id="issueCountBadge" class="issue-count-badge">0 issues</span>
+    </div>
+
+    <!-- Issues List (populated by AI) -->
+    <div id="issuesList">
+        <!-- Issues will be rendered here by JavaScript -->
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="error-state" style="display: none;">
+        <i class="bi bi-exclamation-triangle" style="font-size: 2.5rem;"></i>
+        <p id="errorMessage">Analysis failed</p>
+        <button class="btn-icon" onclick="runAnalysis(true)">
+            <i class="bi bi-arrow-clockwise me-1"></i>Retry
+        </button>
+    </div>
+
+    <!-- Ask AI Follow-up -->
+    <div class="ask-ai-section">
+        <h4><i class="bi bi-chat-dots me-2"></i>Ask AI about this log</h4>
+        <div class="ai-input-row">
+            <input type="text" id="aiQuestion" placeholder="e.g., What caused the camera to restart?">
+            <button onclick="askAI()"><i class="bi bi-send me-1"></i>Ask</button>
+        </div>
+        <div class="ai-response-box" id="aiResponse"></div>
+    </div>
+</div>
+
+<!-- Data for JavaScript -->
+<script type="application/json" id="pageData">
+{
+    "fileId": {{ log_file.id }},
+    "filename": "{{ log_file.original_filename | e }}"
+}
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const pageData = JSON.parse(document.getElementById('pageData').textContent);
+let aiSessionId = `file_${pageData.fileId}_${Date.now()}`;
+let allIssues = [];
+let relevantLogs = [];
+
+// Run analysis on page load
+document.addEventListener('DOMContentLoaded', () => {
+    fetchAIStatus();
+    runAnalysis(false);
+});
+
+async function fetchAIStatus() {
+    try {
+        const response = await fetch('/api/ai/status');
+        const status = await response.json();
+        document.getElementById('aiEngineName').textContent = status.primary_provider || 'Unknown';
+    } catch (error) {
+        document.getElementById('aiEngineName').textContent = 'Unknown';
+    }
+}
+
+async function runAnalysis(forceRefresh = false) {
+    // Show loading
+    document.getElementById('loadingState').style.display = 'block';
+    document.getElementById('summaryStats').style.display = 'none';
+    document.getElementById('filterBar').style.display = 'none';
+    document.getElementById('issuesList').innerHTML = '';
+    document.getElementById('errorState').style.display = 'none';
+
+    try {
+        const response = await fetch(`/api/log-files/${pageData.fileId}/deep-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: 'Analyze this log file and identify all issues. For each issue provide: severity (CRITICAL/HIGH/MEDIUM/LOW), title, description, root cause, and the exact log lines as evidence.',
+                session_id: aiSessionId,
+                force_refresh: forceRefresh
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.analysis) {
+            // Update engine name
+            if (result.providers_used && result.providers_used.length > 0) {
+                document.getElementById('aiEngineName').textContent = result.providers_used[0];
+            }
+
+            // Store relevant logs for detail views
+            relevantLogs = result.relevant_logs || [];
+
+            // Parse the AI analysis into structured issues
+            allIssues = parseAIAnalysis(result.analysis);
+
+            // Render the UI
+            renderAnalysis();
+        } else {
+            showError(result.error || 'Analysis failed');
+        }
+    } catch (error) {
+        showError(error.message);
+    }
+}
+
+function parseAIAnalysis(analysis) {
+    const issues = [];
+    let issueIndex = 0;
+
+    // Debug: log the raw analysis to console
+    console.log('Raw AI analysis:', analysis.substring(0, 500));
+
+    // Strategy 1: Split by "---" lines (the prompt instructs this format)
+    let blocks = analysis.split(/\n-{3,}\n/).filter(b => b.trim());
+    console.log('Split by ---:', blocks.length, 'blocks');
+
+    // Strategy 2: If only 1 block, try splitting by ### headers with emojis
+    if (blocks.length <= 1) {
+        blocks = analysis.split(/(?=###\s*[🔴🟠🟡🟢])/);
+        console.log('Split by emoji headers:', blocks.length, 'blocks');
+    }
+
+    // Strategy 3: If still 1 block, try splitting by numbered issues like "1." "2." etc
+    if (blocks.length <= 1) {
+        blocks = analysis.split(/(?=\n\d+\.\s+[🔴🟠🟡🟢])/);
+        console.log('Split by numbered issues:', blocks.length, 'blocks');
+    }
+
+    // Strategy 4: Try splitting by **Issue or **ISSUE patterns
+    if (blocks.length <= 1) {
+        blocks = analysis.split(/(?=\*\*(?:Issue|ISSUE)\s*\d*[:\s])/i);
+        console.log('Split by **Issue:', blocks.length, 'blocks');
+    }
+
+    // Process each block
+    blocks.forEach((block) => {
+        if (!block.trim()) return;
+
+        // Skip pure summary/recommendation blocks
+        const lowerBlock = block.toLowerCase();
+        if ((lowerBlock.includes('summary') || lowerBlock.includes('📊')) &&
+            !lowerBlock.includes('issue') && !block.match(/[🔴🟠🟡🟢]/)) {
+            return;
+        }
+        if ((lowerBlock.includes('recommended') || lowerBlock.includes('📝')) &&
+            !lowerBlock.includes('issue') && !block.match(/[🔴🟠🟡🟢]/)) {
+            return;
+        }
+
+        // Check if this block looks like an issue
+        const hasIssueKeyword = /issue|problem|error|warning|critical|high|medium|low/i.test(block);
+        const hasEmoji = /[🔴🟠🟡🟢]/.test(block);
+        const hasLogEvidence = /line\s*\d+|```|log evidence/i.test(block);
+
+        if (!hasIssueKeyword && !hasEmoji && !hasLogEvidence) return;
+
+        // Extract severity
+        let severity = 'medium';
+        if (block.includes('🔴') || /\bcritical\b/i.test(block)) severity = 'critical';
+        else if (block.includes('🟠') || /\bhigh\b/i.test(block)) severity = 'high';
+        else if (block.includes('🟡') || /\bmedium\b/i.test(block)) severity = 'medium';
+        else if (block.includes('🟢') || /\blow\b/i.test(block)) severity = 'low';
+
+        // Extract title - try multiple patterns
+        let title = '';
+        const titlePatterns = [
+            /###\s*[🔴🟠🟡🟢]?\s*(?:ISSUE[:\s]*)?([^\n*]+)/i,
+            /\*\*(?:Issue|ISSUE)\s*\d*[:\s]*([^*\n]+)\*\*/i,
+            /\*\*([^*\n]+)\*\*/,  // First bold text
+            /[🔴🟠🟡🟢]\s*(?:ISSUE[:\s]*)?([^\n]+)/i,
+            /^\d+\.\s*[🔴🟠🟡🟢]?\s*(?:ISSUE[:\s]*)?([^\n]+)/im,
+            /ISSUE[:\s]+([^\n]+)/i
+        ];
+
+        for (const pattern of titlePatterns) {
+            const match = block.match(pattern);
+            if (match && match[1]) {
+                title = match[1].replace(/[*#🔴🟠🟡🟢]/g, '').trim();
+                if (title.length > 5 && title.length < 200) break;
+            }
+        }
+
+        // If no title found, use first meaningful line
+        if (!title) {
+            const lines = block.split('\n').filter(l => l.trim());
+            for (const line of lines) {
+                const cleaned = line.replace(/[*#🔴🟠🟡🟢\d.:-]/g, '').trim();
+                if (cleaned.length > 10 && cleaned.length < 150) {
+                    title = cleaned;
+                    break;
+                }
+            }
+        }
+
+        if (!title || title.length < 3) return;
+
+        // Extract description - "What happened" section
+        let description = '';
+        const descPatterns = [
+            /\*\*What happened[:\s]*\*\*\s*([\s\S]*?)(?=\*\*Log|\*\*Why|\*\*Severity|\*\*Bug|```|$)/i,
+            /What happened[:\s]*([\s\S]*?)(?=Log evidence|Why this|Severity|Bug report|```|$)/i,
+            /(?:Description|Details)[:\s]*([\s\S]*?)(?=Log|Why|Severity|Bug|```|$)/i
+        ];
+        for (const pattern of descPatterns) {
+            const match = block.match(pattern);
+            if (match && match[1]) {
+                description = match[1].replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+                if (description.length > 10) break;
+            }
+        }
+
+        // If no description, get text after title until code block or section header
+        if (!description) {
+            const afterTitle = block.split('\n').slice(1).join('\n');
+            const descMatch = afterTitle.match(/^([^`*#]+)/);
+            if (descMatch) {
+                description = descMatch[1].replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+            }
+        }
+
+        // Extract root cause - "Why this is a problem"
+        let rootCause = '';
+        const causePatterns = [
+            /\*\*Why[^*]*\*\*\s*([\s\S]*?)(?=\*\*Severity|\*\*Bug|```|$)/i,
+            /Why[^:]*:[:\s]*([\s\S]*?)(?=Severity|Bug report|```|$)/i,
+            /(?:Impact|Consequence)[:\s]*([\s\S]*?)(?=Severity|Bug|```|$)/i
+        ];
+        for (const pattern of causePatterns) {
+            const match = block.match(pattern);
+            if (match && match[1]) {
+                rootCause = match[1].replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+                if (rootCause.length > 10) break;
+            }
+        }
+
+        // Extract log evidence
+        let logEvidence = '';
+        // First try code blocks
+        const codeMatch = block.match(/```[\s\S]*?\n([\s\S]*?)```/);
+        if (codeMatch) {
+            logEvidence = codeMatch[1].trim();
+        }
+        // Try "Log evidence" section
+        if (!logEvidence) {
+            const evidenceMatch = block.match(/\*\*Log evidence[^*]*\*\*\s*([\s\S]*?)(?=\*\*Why|\*\*Severity|\*\*Bug|$)/i);
+            if (evidenceMatch) {
+                logEvidence = evidenceMatch[1].replace(/```/g, '').trim();
+            }
+        }
+        // Try to find Line references
+        if (!logEvidence) {
+            const lineMatches = block.match(/Line\s+\d+[:\s][^\n]+/gi);
+            if (lineMatches) {
+                logEvidence = lineMatches.join('\n');
+            }
+        }
+
+        // Extract bug report title
+        let bugTitle = title;
+        const bugMatch = block.match(/Bug report[^:]*:[:\s]*["']?([^"'\n]+)/i);
+        if (bugMatch && bugMatch[1].trim()) {
+            bugTitle = bugMatch[1].trim();
+        }
+
+        issues.push({
+            id: `ai-issue-${issueIndex++}`,
+            severity,
+            title: title.substring(0, 150),
+            description: description || 'Click to see full details.',
+            rootCause: rootCause || '',
+            logEvidence: logEvidence,
+            bugTitle: bugTitle.substring(0, 150),
+            rawContent: block
+        });
+    });
+
+    console.log('Parsed issues:', issues.length);
+
+    // Fallback: If no issues parsed but we have content, try line-by-line emoji approach
+    if (issues.length === 0 && analysis.length > 100) {
+        // Look for lines with severity emojis
+        const lines = analysis.split('\n');
+        let currentIssue = null;
+
+        lines.forEach((line, lineIdx) => {
+            // Check if line starts a new issue (has emoji)
+            if (/[🔴🟠🟡🟢]/.test(line)) {
+                // Save previous issue
+                if (currentIssue && currentIssue.title) {
+                    issues.push(currentIssue);
+                }
+
+                // Determine severity
+                let severity = 'medium';
+                if (line.includes('🔴')) severity = 'critical';
+                else if (line.includes('🟠')) severity = 'high';
+                else if (line.includes('🟡')) severity = 'medium';
+                else if (line.includes('🟢')) severity = 'low';
+
+                // Extract title from line
+                const title = line.replace(/[🔴🟠🟡🟢*#\d.:-]/g, '').replace(/ISSUE/gi, '').trim();
+
+                currentIssue = {
+                    id: `ai-issue-${issues.length}`,
+                    severity,
+                    title: title.substring(0, 150) || `Issue ${issues.length + 1}`,
+                    description: '',
+                    rootCause: '',
+                    logEvidence: '',
+                    bugTitle: title.substring(0, 150),
+                    rawContent: line
+                };
+            } else if (currentIssue) {
+                // Add line to current issue's raw content
+                currentIssue.rawContent += '\n' + line;
+
+                // Try to extract description from subsequent lines
+                if (!currentIssue.description && line.trim() && !line.startsWith('*') && !line.startsWith('#')) {
+                    currentIssue.description = line.trim();
+                }
+            }
+        });
+
+        // Don't forget the last issue
+        if (currentIssue && currentIssue.title) {
+            issues.push(currentIssue);
+        }
+
+        console.log('Fallback emoji parsing found:', issues.length, 'issues');
+    }
+
+    // Ultimate fallback: show raw analysis
+    if (issues.length === 0 && analysis.length > 50) {
+        // Extract any summary counts
+        const countMatch = analysis.match(/Total issues[^:]*:\s*(\d+)/i);
+        const summaryTitle = countMatch ? `Analysis found ${countMatch[1]} issues` : 'Analysis Summary';
+
+        issues.push({
+            id: 'ai-issue-0',
+            severity: 'medium',
+            title: summaryTitle,
+            description: 'Click to expand and see the full AI analysis.',
+            rootCause: '',
+            logEvidence: '',
+            bugTitle: 'Log Analysis Report',
+            rawContent: analysis
+        });
+    }
+
+    return issues;
+}
+
+function renderAnalysis() {
+    document.getElementById('loadingState').style.display = 'none';
+
+    if (allIssues.length === 0) {
+        document.getElementById('issuesList').innerHTML = `
+            <div class="no-issues">
+                <i class="bi bi-check-circle"></i>
+                <p>No significant issues detected in this log file.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Count by severity
+    const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+    allIssues.forEach(issue => counts[issue.severity]++);
+
+    document.getElementById('criticalCount').textContent = counts.critical;
+    document.getElementById('highCount').textContent = counts.high;
+    document.getElementById('mediumCount').textContent = counts.medium;
+    document.getElementById('lowCount').textContent = counts.low;
+
+    // Show stats and filter
+    document.getElementById('summaryStats').style.display = 'grid';
+    document.getElementById('filterBar').style.display = 'flex';
+    document.getElementById('issueCountBadge').textContent = `${allIssues.length} issues`;
+
+    // Render issue cards
+    renderIssues(allIssues);
+}
+
+function renderIssues(issues) {
+    const container = document.getElementById('issuesList');
+
+    if (issues.length === 0) {
+        container.innerHTML = `
+            <div class="no-issues">
+                <i class="bi bi-filter"></i>
+                <p>No issues match the current filter.</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = issues.map(issue => `
+        <div class="issue-card" id="${issue.id}" data-severity="${issue.severity}">
+            <div class="issue-header" onclick="toggleIssue('${issue.id}')">
+                <span class="issue-severity ${issue.severity}">${issue.severity}</span>
+                <div class="issue-main">
+                    <div class="issue-title">${escapeHtml(issue.title)}</div>
+                    <div class="issue-summary">${escapeHtml(issue.description.substring(0, 150))}${issue.description.length > 150 ? '...' : ''}</div>
+                </div>
+                <i class="bi bi-chevron-down issue-toggle"></i>
+            </div>
+            <div class="issue-details">
+                ${issue.description ? `
+                <div class="detail-section">
+                    <div class="detail-label">What Happened</div>
+                    <div class="detail-content">${escapeHtml(issue.description)}</div>
+                </div>
+                ` : ''}
+
+                ${issue.rootCause ? `
+                <div class="detail-section">
+                    <div class="detail-label">Why This Is A Problem</div>
+                    <div class="detail-content">${escapeHtml(issue.rootCause)}</div>
+                </div>
+                ` : ''}
+
+                ${issue.logEvidence ? `
+                <div class="detail-section">
+                    <div class="detail-label">Log Evidence</div>
+                    <div class="log-evidence">${formatLogEvidence(issue.logEvidence)}</div>
+                </div>
+                ` : ''}
+
+                ${issue.rawContent ? `
+                <div class="detail-section">
+                    <div class="detail-label" style="cursor: pointer;" onclick="toggleRawContent('${issue.id}')">
+                        <i class="bi bi-code"></i> Raw AI Response <small>(click to toggle)</small>
+                    </div>
+                    <div id="raw-${issue.id}" class="log-evidence" style="display: none; white-space: pre-wrap; font-size: 0.75rem; max-height: 400px;">${escapeHtml(issue.rawContent)}</div>
+                </div>
+                ` : ''}
+
+                <div class="issue-actions">
+                    <button class="btn-jira" onclick="createBugReport('${issue.id}')">
+                        <i class="bi bi-bug"></i> Create Bug Report
+                    </button>
+                    <button class="btn-secondary" onclick="copyToClipboard('${issue.id}')">
+                        <i class="bi bi-clipboard"></i> Copy Details
+                    </button>
+                    <button class="btn-secondary" onclick="askAboutIssue('${issue.id}')">
+                        <i class="bi bi-chat"></i> Ask AI
+                    </button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function toggleIssue(issueId) {
+    const card = document.getElementById(issueId);
+    card.classList.toggle('expanded');
+}
+
+function toggleRawContent(issueId) {
+    const rawDiv = document.getElementById(`raw-${issueId}`);
+    if (rawDiv) {
+        rawDiv.style.display = rawDiv.style.display === 'none' ? 'block' : 'none';
+    }
+}
+
+function filterIssues() {
+    const severity = document.getElementById('severityFilter').value.toLowerCase();
+    const search = document.getElementById('searchFilter').value.toLowerCase();
+
+    const filtered = allIssues.filter(issue => {
+        const matchSeverity = !severity || issue.severity === severity;
+        const matchSearch = !search ||
+            issue.title.toLowerCase().includes(search) ||
+            issue.description.toLowerCase().includes(search);
+        return matchSeverity && matchSearch;
+    });
+
+    document.getElementById('issueCountBadge').textContent = `${filtered.length} issues`;
+    renderIssues(filtered);
+}
+
+function formatLogEvidence(evidence) {
+    const lines = evidence.split('\n');
+    return lines.map(line => {
+        const lineMatch = line.match(/^Line\s*(\d+)[:\s]*(.*)/i);
+        if (lineMatch) {
+            const lineNum = lineMatch[1];
+            const content = lineMatch[2];
+            const isError = /error|fail|critical|fatal/i.test(content);
+            const isWarning = /warn/i.test(content);
+            const cls = isError ? 'error highlight' : isWarning ? 'warning' : '';
+            return `<div class="log-line ${cls}"><span class="log-line-number">${lineNum}</span><span class="log-line-content">${escapeHtml(content)}</span></div>`;
+        }
+        return `<div class="log-line"><span class="log-line-content">${escapeHtml(line)}</span></div>`;
+    }).join('');
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showError(message) {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('errorState').style.display = 'block';
+    document.getElementById('errorMessage').textContent = message;
+}
+
+function createBugReport(issueId) {
+    const issue = allIssues.find(i => i.id === issueId);
+    if (!issue) return;
+
+    // Store issue data for bug report page
+    sessionStorage.setItem('bugReportData', JSON.stringify({
+        title: issue.bugTitle || issue.title,
+        description: issue.description,
+        severity: issue.severity,
+        rootCause: issue.rootCause,
+        logEvidence: issue.logEvidence,
+        fileId: pageData.fileId,
+        filename: pageData.filename
+    }));
+
+    // Redirect to bug report creation page
+    window.location.href = `/bug-report/new?file_id=${pageData.fileId}&ai_issue=true`;
+}
+
+function copyToClipboard(issueId) {
+    const issue = allIssues.find(i => i.id === issueId);
+    if (!issue) return;
+
+    const text = `
+**${issue.title}**
+Severity: ${issue.severity.toUpperCase()}
+
+**What Happened:**
+${issue.description}
+
+${issue.rootCause ? `**Root Cause:**\n${issue.rootCause}\n` : ''}
+${issue.logEvidence ? `**Log Evidence:**\n\`\`\`\n${issue.logEvidence}\n\`\`\`` : ''}
+    `.trim();
+
+    navigator.clipboard.writeText(text).then(() => {
+        alert('Issue details copied to clipboard!');
+    });
+}
+
+function askAboutIssue(issueId) {
+    const issue = allIssues.find(i => i.id === issueId);
+    if (!issue) return;
+
+    const input = document.getElementById('aiQuestion');
+    input.value = `Tell me more about the "${issue.title}" issue. What are the possible fixes?`;
+    input.focus();
+    input.scrollIntoView({ behavior: 'smooth' });
+}
+
+async function askAI() {
+    const input = document.getElementById('aiQuestion');
+    const responseBox = document.getElementById('aiResponse');
+    const question = input.value.trim();
+
+    if (!question) return;
+
+    responseBox.style.display = 'block';
+    responseBox.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Thinking...';
+
+    try {
+        const response = await fetch(`/api/log-files/${pageData.fileId}/deep-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: question,
+                session_id: aiSessionId
+            })
+        });
+
+        const result = await response.json();
+        if (result.analysis) {
+            responseBox.innerHTML = formatAIResponse(result.analysis);
+        } else {
+            responseBox.innerHTML = `<span style="color: #dc3545;">Error: ${result.error}</span>`;
+        }
+    } catch (error) {
+        responseBox.innerHTML = `<span style="color: #dc3545;">Error: ${error.message}</span>`;
+    }
+}
+
+function formatAIResponse(text) {
+    return text
+        .replace(/```([\s\S]*?)```/g, '<pre style="background:#1a1a2e;color:#e9ecef;padding:1rem;border-radius:8px;overflow-x:auto;">$1</pre>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code style="background:#e9ecef;padding:0.2rem 0.4rem;border-radius:3px;">$1</code>')
+        .replace(/\n/g, '<br>');
+}
+
+// Enter key for AI input
+document.getElementById('aiQuestion').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') askAI();
+});
+</script>
+{% endblock %}

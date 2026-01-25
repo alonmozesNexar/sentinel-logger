@@ -1,0 +1,1075 @@
+{% extends "base.html" %}
+
+{% block title %}Create Jira Bug - Sentinel Logger{% endblock %}
+
+{% block extra_css %}
+<style>
+    .mode-toggle {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    .mode-toggle .btn {
+        flex: 1;
+        padding: 15px;
+        font-size: 1.1rem;
+    }
+    .mode-toggle .btn.active {
+        box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.25);
+    }
+    .mode-content {
+        display: none;
+    }
+    .mode-content.active {
+        display: block;
+    }
+    .jira-field {
+        margin-bottom: 15px;
+    }
+    .jira-field label {
+        font-weight: 600;
+        margin-bottom: 5px;
+        display: block;
+    }
+    .copy-btn {
+        cursor: pointer;
+        padding: 2px 8px;
+        font-size: 0.8rem;
+    }
+    .copy-btn:hover {
+        background-color: #e9ecef;
+    }
+    /* Enhanced Log Context Styles */
+    .log-context-container {
+        border: 1px solid #343a40;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    .log-context-header {
+        background: #2d2d2d;
+        padding: 12px 15px;
+        border-bottom: 1px solid #444;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .log-context-stats {
+        display: flex;
+        gap: 15px;
+        font-size: 0.85rem;
+    }
+    .log-context-stats .stat {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .log-context-stats .stat-error {
+        color: #f14c4c;
+    }
+    .log-context-stats .stat-warning {
+        color: #cca700;
+    }
+    .log-context-stats .stat-info {
+        color: #3794ff;
+    }
+    .log-context-stats .stat-total {
+        color: #adb5bd;
+    }
+    .log-context-filters {
+        display: flex;
+        gap: 5px;
+    }
+    .log-context-filters .btn {
+        padding: 4px 10px;
+        font-size: 0.75rem;
+    }
+    .log-context-filters .btn.active {
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+    }
+    .log-context-box {
+        max-height: 400px;
+        overflow-y: auto;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 0.82rem;
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 0;
+    }
+    .log-context-box.collapsed {
+        max-height: 200px;
+    }
+    .log-entry-row {
+        display: flex;
+        border-bottom: 1px solid #2d2d2d;
+        transition: background-color 0.15s ease;
+    }
+    .log-entry-row:hover {
+        background-color: #2a2a2a;
+    }
+    .log-entry-row.is-issue-line {
+        background-color: rgba(220, 53, 69, 0.15);
+        border-left: 3px solid #dc3545;
+    }
+    .log-entry-row.is-issue-line:hover {
+        background-color: rgba(220, 53, 69, 0.25);
+    }
+    .log-entry-row.hidden-by-filter {
+        display: none;
+    }
+    .log-entry-line-num {
+        min-width: 55px;
+        padding: 6px 10px;
+        background: #252526;
+        color: #858585;
+        text-align: right;
+        user-select: none;
+        border-right: 1px solid #3c3c3c;
+        flex-shrink: 0;
+    }
+    .log-entry-timestamp {
+        min-width: 90px;
+        padding: 6px 8px;
+        color: #6a9955;
+        font-size: 0.75rem;
+        flex-shrink: 0;
+        border-right: 1px solid #2d2d2d;
+    }
+    .log-entry-severity {
+        min-width: 50px;
+        padding: 6px 8px;
+        text-align: center;
+        flex-shrink: 0;
+        border-right: 1px solid #2d2d2d;
+    }
+    .log-entry-severity .badge {
+        font-size: 0.65rem;
+        padding: 2px 6px;
+        font-weight: 500;
+    }
+    .log-entry-service {
+        min-width: 100px;
+        max-width: 100px;
+        padding: 6px 8px;
+        color: #9cdcfe;
+        font-size: 0.75rem;
+        flex-shrink: 0;
+        border-right: 1px solid #2d2d2d;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .log-entry-content {
+        padding: 6px 10px;
+        flex: 1;
+        word-break: break-all;
+        white-space: pre-wrap;
+    }
+    .log-entry-row.severity-critical .log-entry-content,
+    .log-entry-row.severity-error .log-entry-content {
+        color: #f14c4c;
+    }
+    .log-entry-row.severity-warning .log-entry-content {
+        color: #cca700;
+    }
+    .log-entry-row.severity-info .log-entry-content {
+        color: #3794ff;
+    }
+    .log-entry-row.severity-debug .log-entry-content {
+        color: #808080;
+    }
+    .log-context-footer {
+        background: #2d2d2d;
+        padding: 10px 15px;
+        border-top: 1px solid #444;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .log-context-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .log-context-legend {
+        display: flex;
+        gap: 15px;
+        font-size: 0.75rem;
+        color: #adb5bd;
+    }
+    .log-context-legend .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    .log-context-legend .legend-marker {
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+    }
+    .log-context-legend .legend-marker.issue-line {
+        background: rgba(220, 53, 69, 0.5);
+        border-left: 3px solid #dc3545;
+    }
+    .log-context-legend .legend-marker.context-line {
+        background: #1e1e1e;
+        border: 1px solid #444;
+    }
+    .collapse-toggle {
+        cursor: pointer;
+        color: #6c757d;
+        font-size: 0.85rem;
+    }
+    .collapse-toggle:hover {
+        color: #adb5bd;
+    }
+    .no-entries-message {
+        padding: 30px;
+        text-align: center;
+        color: #6c757d;
+    }
+    .preview-panel {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+    }
+    .jira-preview {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    .jira-preview h2 {
+        border-bottom: 1px solid #ddd;
+        padding-bottom: 10px;
+    }
+    .severity-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 4px;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+    .severity-critical { background: #000; color: #fff; }
+    .severity-high { background: #dc3545; color: #fff; }
+    .severity-medium { background: #ffc107; color: #000; }
+    .severity-low { background: #17a2b8; color: #fff; }
+    .field-copied {
+        animation: flash-green 0.5s ease;
+    }
+    @keyframes flash-green {
+        0%, 100% { background-color: transparent; }
+        50% { background-color: #d4edda; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                {% if issue %}
+                <li class="breadcrumb-item"><a href="{{ url_for('main.issues_list') }}">Issues</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('main.issue_detail', issue_id=issue.id) }}">{{ issue.title[:30] }}...</a></li>
+                {% endif %}
+                <li class="breadcrumb-item active" aria-current="page">Create Jira Bug</li>
+            </ol>
+        </nav>
+        <h1 class="h3">
+            <i class="bi bi-bug me-2"></i>Create Jira Bug
+        </h1>
+        <p class="text-muted">Create a bug report and submit to Jira</p>
+    </div>
+</div>
+
+<!-- Mode Toggle -->
+<div class="mode-toggle">
+    <button type="button" class="btn btn-outline-primary active" id="btn-automatic" onclick="switchMode('automatic')">
+        <i class="bi bi-magic me-2"></i>Automatic
+        <small class="d-block text-muted">Pre-filled from issue data</small>
+    </button>
+    <button type="button" class="btn btn-outline-secondary" id="btn-manual" onclick="switchMode('manual')">
+        <i class="bi bi-pencil me-2"></i>Manual
+        <small class="d-block text-muted">Copy/paste from analysis</small>
+    </button>
+</div>
+
+<div class="row">
+    <!-- Left Column - Form -->
+    <div class="col-lg-7">
+        <!-- Automatic Mode -->
+        <div class="mode-content active" id="mode-automatic">
+            <form id="jira-form-automatic">
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Jira Configuration</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="jira-field">
+                            <label for="jira-project">Jira Project</label>
+                            <select class="form-select" id="jira-project" name="jira_project" onchange="updatePreview()">
+                                <option value="BR">BR - Bug Reports (Backlog)</option>
+                                <option value="FS">FS - Field Support</option>
+                            </select>
+                            <small class="text-muted">
+                                <span id="project-url-hint">https://getnexar.atlassian.net/jira/software/c/projects/BR/boards/287/backlog</span>
+                            </small>
+                        </div>
+
+                        <div class="jira-field">
+                            <label for="issue-type">Issue Type</label>
+                            <select class="form-select" id="issue-type" name="issue_type">
+                                <option value="Bug">Bug</option>
+                                <option value="Task">Task</option>
+                                <option value="Story">Story</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-file-text me-2"></i>Bug Details</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="jira-field">
+                            <label for="bug-title">Summary (Title)</label>
+                            <input type="text" class="form-control" id="bug-title" name="title"
+                                   value="{{ issue.title if issue else prefill_title }}" onchange="updatePreview()">
+                        </div>
+
+                        <div class="jira-field">
+                            <label for="bug-severity">Priority</label>
+                            <select class="form-select" id="bug-severity" name="severity" onchange="updatePreview()">
+                                <option value="Highest" {% if (issue and issue.severity == 'CRITICAL') or prefill_severity == 'CRITICAL' %}selected{% endif %}>Highest (Critical)</option>
+                                <option value="High" {% if (issue and issue.severity == 'HIGH') or prefill_severity == 'HIGH' %}selected{% endif %}>High</option>
+                                <option value="Medium" {% if (issue and issue.severity == 'MEDIUM') or prefill_severity == 'MEDIUM' or (not issue and not prefill_severity) %}selected{% endif %}>Medium</option>
+                                <option value="Low" {% if (issue and issue.severity in ['LOW', 'INFO']) or prefill_severity == 'LOW' %}selected{% endif %}>Low</option>
+                            </select>
+                        </div>
+
+                        <div class="jira-field">
+                            <label for="bug-description">Description</label>
+                            <textarea class="form-control" id="bug-description" name="description" rows="6" onchange="updatePreview()">{{ issue.description if issue else prefill_description }}</textarea>
+                        </div>
+
+                        <div class="jira-field">
+                            <label for="bug-category">Component/Category</label>
+                            <input type="text" class="form-control" id="bug-category" name="category"
+                                   value="{{ issue.category if issue else '' }}">
+                        </div>
+
+                        <div class="jira-field">
+                            <label for="bug-steps">Steps to Reproduce</label>
+                            <textarea class="form-control" id="bug-steps" name="steps_to_reproduce" rows="4"
+                                      placeholder="1. Step one&#10;2. Step two&#10;3. Step three" onchange="updatePreview()"></textarea>
+                        </div>
+
+                        <div class="jira-field">
+                            <label for="bug-expected">Expected Behavior</label>
+                            <textarea class="form-control" id="bug-expected" name="expected_behavior" rows="2" onchange="updatePreview()"></textarea>
+                        </div>
+
+                        <div class="jira-field">
+                            <label for="bug-actual">Actual Behavior</label>
+                            <textarea class="form-control" id="bug-actual" name="actual_behavior" rows="2" onchange="updatePreview()">{{ issue.description if issue else '' }}</textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-code-square me-2"></i>Log Evidence</h5>
+                        {% if context_entries %}
+                        <span class="collapse-toggle" onclick="toggleLogContextCollapse()">
+                            <i class="bi bi-chevron-down" id="collapse-icon"></i>
+                            <span id="collapse-text">Collapse</span>
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="card-body p-0">
+                        {% if context_entries %}
+                        {# Calculate stats using namespace for mutable counters #}
+                        {% set ns = namespace(error_count=0, warning_count=0, info_count=0) %}
+                        {% for entry in context_entries %}
+                            {% if entry.severity in ['CRITICAL', 'ERROR'] %}
+                                {% set ns.error_count = ns.error_count + 1 %}
+                            {% elif entry.severity == 'WARNING' %}
+                                {% set ns.warning_count = ns.warning_count + 1 %}
+                            {% elif entry.severity == 'INFO' %}
+                                {% set ns.info_count = ns.info_count + 1 %}
+                            {% endif %}
+                        {% endfor %}
+                        {% set error_count = ns.error_count %}
+                        {% set warning_count = ns.warning_count %}
+                        {% set info_count = ns.info_count %}
+                        {% set total_count = context_entries | length %}
+
+                        {# Get affected lines from issue #}
+                        {% if issue and issue.affected_lines %}
+                        {% set affected_lines = issue.affected_lines | from_json %}
+                        {% else %}
+                        {% set affected_lines = [] %}
+                        {% endif %}
+
+                        <div class="log-context-container">
+                            <!-- Header with stats and filters -->
+                            <div class="log-context-header">
+                                <div class="log-context-stats">
+                                    <div class="stat stat-total">
+                                        <i class="bi bi-list-ul"></i>
+                                        <span>{{ total_count }} lines</span>
+                                    </div>
+                                    {% if error_count > 0 %}
+                                    <div class="stat stat-error">
+                                        <i class="bi bi-exclamation-circle-fill"></i>
+                                        <span>{{ error_count }} error{{ 's' if error_count != 1 else '' }}</span>
+                                    </div>
+                                    {% endif %}
+                                    {% if warning_count > 0 %}
+                                    <div class="stat stat-warning">
+                                        <i class="bi bi-exclamation-triangle-fill"></i>
+                                        <span>{{ warning_count }} warning{{ 's' if warning_count != 1 else '' }}</span>
+                                    </div>
+                                    {% endif %}
+                                    {% if info_count > 0 %}
+                                    <div class="stat stat-info">
+                                        <i class="bi bi-info-circle-fill"></i>
+                                        <span>{{ info_count }} info</span>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="log-context-filters">
+                                    <button type="button" class="btn btn-outline-light btn-sm active" data-filter="all" onclick="filterLogContext('all', this)">
+                                        All
+                                    </button>
+                                    <button type="button" class="btn btn-outline-danger btn-sm" data-filter="error" onclick="filterLogContext('error', this)">
+                                        Errors
+                                    </button>
+                                    <button type="button" class="btn btn-outline-warning btn-sm" data-filter="warning" onclick="filterLogContext('warning', this)">
+                                        Warnings
+                                    </button>
+                                    <button type="button" class="btn btn-outline-info btn-sm" data-filter="issue" onclick="filterLogContext('issue', this)">
+                                        Issue Lines
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Log entries -->
+                            <div class="log-context-box" id="log-context">
+                                {% for entry in context_entries %}
+                                <div class="log-entry-row severity-{{ entry.severity|lower if entry.severity else 'debug' }} {% if entry.line_number in affected_lines %}is-issue-line{% endif %}"
+                                     data-severity="{{ entry.severity|lower if entry.severity else 'debug' }}"
+                                     data-line="{{ entry.line_number }}"
+                                     data-is-issue="{{ 'true' if entry.line_number in affected_lines else 'false' }}">
+                                    <div class="log-entry-line-num">{{ entry.line_number }}</div>
+                                    <div class="log-entry-timestamp" title="Timestamp">
+                                        {% if entry.timestamp %}
+                                        {{ entry.timestamp.strftime('%H:%M:%S') }}
+                                        {% else %}
+                                        --:--:--
+                                        {% endif %}
+                                    </div>
+                                    <div class="log-entry-severity">
+                                        {% if entry.severity == 'CRITICAL' %}
+                                        <span class="badge bg-dark" title="Critical">CRIT</span>
+                                        {% elif entry.severity == 'ERROR' %}
+                                        <span class="badge bg-danger" title="Error">ERR</span>
+                                        {% elif entry.severity == 'WARNING' %}
+                                        <span class="badge bg-warning text-dark" title="Warning">WARN</span>
+                                        {% elif entry.severity == 'INFO' %}
+                                        <span class="badge bg-info" title="Info">INFO</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary" title="Debug">DBG</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="log-entry-service" title="{{ entry.service or 'Unknown service' }}{% if entry.component %} / {{ entry.component }}{% endif %}">
+                                        {{ entry.service or '-' }}
+                                    </div>
+                                    <div class="log-entry-content">{{ entry.message or entry.raw_content }}</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+
+                            <!-- Footer with actions and legend -->
+                            <div class="log-context-footer">
+                                <div class="log-context-actions">
+                                    <button type="button" class="btn btn-sm btn-outline-light" onclick="copyLogContextFormatted()">
+                                        <i class="bi bi-clipboard me-1"></i>Copy for Jira
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="copyLogContextPlain()">
+                                        <i class="bi bi-file-text me-1"></i>Copy Plain Text
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="copyLogContextJson()">
+                                        <i class="bi bi-braces me-1"></i>Copy as JSON
+                                    </button>
+                                </div>
+                                <div class="log-context-legend">
+                                    <div class="legend-item">
+                                        <div class="legend-marker issue-line"></div>
+                                        <span>Issue lines</span>
+                                    </div>
+                                    <div class="legend-item">
+                                        <div class="legend-marker context-line"></div>
+                                        <span>Context</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="no-entries-message">
+                            <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
+                            <p class="mt-2 mb-0">No log context available</p>
+                            <small class="text-muted">Log context will appear here when available from the issue</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2 mb-4">
+                    <button type="button" class="btn btn-success btn-lg" onclick="openInJira()">
+                        <i class="bi bi-box-arrow-up-right me-2"></i>Open in Jira
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="copyAllToClipboard()">
+                        <i class="bi bi-clipboard me-1"></i>Copy All Fields
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="saveDraft()">
+                        <i class="bi bi-save me-1"></i>Save Draft
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Manual Mode -->
+        <div class="mode-content" id="mode-manual">
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="bi bi-clipboard-data me-2"></i>Manual Bug Creation</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-4">
+                        Use this mode to manually copy data from the analysis page and paste into Jira.
+                        Click on any field below to copy it to your clipboard.
+                    </p>
+
+                    <div class="jira-field">
+                        <label>Jira Project</label>
+                        <select class="form-select" id="manual-jira-project" onchange="updateManualProjectUrl()">
+                            <option value="BR">BR - Bug Reports (Backlog)</option>
+                            <option value="FS">FS - Field Support</option>
+                        </select>
+                        <small class="text-muted">
+                            <span id="manual-project-url">https://getnexar.atlassian.net/jira/software/c/projects/BR/boards/287/backlog</span>
+                        </small>
+                    </div>
+
+                    <hr>
+
+                    <h6 class="mb-3">Quick Copy Fields</h6>
+
+                    {% if issue %}
+                    <div class="list-group mb-3">
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>Title:</strong> {{ issue.title }}
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary copy-btn" onclick="copyField('{{ issue.title }}', this)">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>Severity:</strong> {{ issue.severity }}
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary copy-btn" onclick="copyField('{{ issue.severity }}', this)">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>Category:</strong> {{ issue.category }}
+                            </div>
+                            <button class="btn btn-sm btn-outline-primary copy-btn" onclick="copyField('{{ issue.category }}', this)">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <strong>Description:</strong>
+                                <button class="btn btn-sm btn-outline-primary copy-btn" onclick="copyField('{{ issue.description | replace('\n', '\\n') | replace('\'', '\\\'') }}', this)">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
+                            <div class="mt-2 text-muted" style="white-space: pre-wrap;">{{ issue.description[:500] }}{% if issue.description|length > 500 %}...{% endif %}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>Tip:</strong> Go to the <a href="{{ url_for('main.analyze', file_id=log_file.id) if log_file else '#' }}">Analysis page</a> to see detailed issue information and log context that you can copy.
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-success btn-lg" onclick="openJiraManual()">
+                            <i class="bi bi-box-arrow-up-right me-2"></i>Open Jira Project
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column - Preview & Info -->
+    <div class="col-lg-5">
+        <!-- Issue Info (if available) -->
+        {% if issue %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Source Issue</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr>
+                        <th>ID:</th>
+                        <td>#{{ issue.id }}</td>
+                    </tr>
+                    <tr>
+                        <th>Severity:</th>
+                        <td>
+                            <span class="severity-badge severity-{{ issue.severity|lower }}">{{ issue.severity }}</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Category:</th>
+                        <td>{{ issue.category }}</td>
+                    </tr>
+                    <tr>
+                        <th>Occurrences:</th>
+                        <td>{{ issue.occurrence_count }}</td>
+                    </tr>
+                    <tr>
+                        <th>First Seen:</th>
+                        <td>{{ issue.first_occurrence.strftime('%Y-%m-%d %H:%M') if issue.first_occurrence else 'N/A' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Source File:</th>
+                        <td>{{ log_file.original_filename if log_file else 'N/A' }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Preview Panel -->
+        <div class="card sticky-top" style="top: 20px;">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-eye me-2"></i>Jira Preview</h5>
+            </div>
+            <div class="card-body preview-panel">
+                <div class="jira-preview" id="jira-preview">
+                    <h2 id="preview-title">{{ issue.title if issue else 'Bug Title' }}</h2>
+                    <div class="mb-3">
+                        <span class="badge bg-danger" id="preview-priority">High</span>
+                        <span class="badge bg-secondary" id="preview-type">Bug</span>
+                    </div>
+                    <div id="preview-content">
+                        <h6>Description</h6>
+                        <p id="preview-description">{{ issue.description if issue else 'Description will appear here...' }}</p>
+
+                        <h6>Steps to Reproduce</h6>
+                        <p id="preview-steps" class="text-muted">Not specified</p>
+
+                        <h6>Expected Behavior</h6>
+                        <p id="preview-expected" class="text-muted">Not specified</p>
+
+                        <h6>Actual Behavior</h6>
+                        <p id="preview-actual">{{ issue.description if issue else 'Not specified' }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Jira project URLs
+const JIRA_PROJECTS = {
+    'BR': 'https://getnexar.atlassian.net/jira/software/c/projects/BR/boards/287/backlog',
+    'FS': 'https://getnexar.atlassian.net/jira/software/c/projects/FS/boards/347'
+};
+
+function switchMode(mode) {
+    // Update buttons
+    document.getElementById('btn-automatic').classList.toggle('active', mode === 'automatic');
+    document.getElementById('btn-automatic').classList.toggle('btn-outline-primary', mode === 'automatic');
+    document.getElementById('btn-automatic').classList.toggle('btn-outline-secondary', mode !== 'automatic');
+
+    document.getElementById('btn-manual').classList.toggle('active', mode === 'manual');
+    document.getElementById('btn-manual').classList.toggle('btn-outline-primary', mode === 'manual');
+    document.getElementById('btn-manual').classList.toggle('btn-outline-secondary', mode !== 'manual');
+
+    // Update content
+    document.getElementById('mode-automatic').classList.toggle('active', mode === 'automatic');
+    document.getElementById('mode-manual').classList.toggle('active', mode === 'manual');
+}
+
+function updatePreview() {
+    const title = document.getElementById('bug-title').value || 'Bug Title';
+    const description = document.getElementById('bug-description').value || 'Description...';
+    const steps = document.getElementById('bug-steps').value || 'Not specified';
+    const expected = document.getElementById('bug-expected').value || 'Not specified';
+    const actual = document.getElementById('bug-actual').value || 'Not specified';
+    const severity = document.getElementById('bug-severity').value;
+    const project = document.getElementById('jira-project').value;
+
+    document.getElementById('preview-title').textContent = title;
+    document.getElementById('preview-description').textContent = description;
+    document.getElementById('preview-steps').textContent = steps;
+    document.getElementById('preview-expected').textContent = expected;
+    document.getElementById('preview-actual').textContent = actual;
+    document.getElementById('preview-priority').textContent = severity;
+
+    // Update project URL hint
+    document.getElementById('project-url-hint').textContent = JIRA_PROJECTS[project];
+}
+
+function updateManualProjectUrl() {
+    const project = document.getElementById('manual-jira-project').value;
+    document.getElementById('manual-project-url').textContent = JIRA_PROJECTS[project];
+}
+
+function openInJira() {
+    const project = document.getElementById('jira-project').value;
+    const title = encodeURIComponent(document.getElementById('bug-title').value);
+    const description = buildJiraDescription();
+
+    // Open Jira create issue page with pre-filled data
+    const jiraUrl = `https://getnexar.atlassian.net/secure/CreateIssueDetails!init.jspa?pid=${project === 'BR' ? '10000' : '10001'}&issuetype=10004&summary=${title}&description=${encodeURIComponent(description)}`;
+
+    // For now, just open the project board - user will create from there
+    window.open(JIRA_PROJECTS[project], '_blank');
+
+    // Copy the formatted description to clipboard
+    copyAllToClipboard();
+
+    alert('Jira project opened in new tab.\nBug details have been copied to your clipboard.\n\nClick "Create" in Jira and paste the details.');
+}
+
+function openJiraManual() {
+    const project = document.getElementById('manual-jira-project').value;
+    window.open(JIRA_PROJECTS[project], '_blank');
+}
+
+function buildJiraDescription() {
+    const description = document.getElementById('bug-description').value;
+    const steps = document.getElementById('bug-steps').value;
+    const expected = document.getElementById('bug-expected').value;
+    const actual = document.getElementById('bug-actual').value;
+    const category = document.getElementById('bug-category').value;
+
+    let jiraDesc = `h2. Description\n${description}\n\n`;
+
+    if (category) {
+        jiraDesc += `*Component:* ${category}\n\n`;
+    }
+
+    jiraDesc += `h2. Steps to Reproduce\n${steps || 'Not specified'}\n\n`;
+    jiraDesc += `h2. Expected Behavior\n${expected || 'Not specified'}\n\n`;
+    jiraDesc += `h2. Actual Behavior\n${actual || description}\n\n`;
+
+    // Add log context with enhanced formatting
+    if (logEntriesData.length > 0) {
+        const issueLines = logEntriesData.filter(e => e.is_issue_line);
+        const errorCount = logEntriesData.filter(e => e.severity === 'ERROR' || e.severity === 'CRITICAL').length;
+        const warningCount = logEntriesData.filter(e => e.severity === 'WARNING').length;
+
+        jiraDesc += `h2. Log Evidence\n`;
+        jiraDesc += `*Summary:* ${logEntriesData.length} lines`;
+        if (errorCount > 0) jiraDesc += `, ${errorCount} error${errorCount !== 1 ? 's' : ''}`;
+        if (warningCount > 0) jiraDesc += `, ${warningCount} warning${warningCount !== 1 ? 's' : ''}`;
+        jiraDesc += '\n\n';
+
+        jiraDesc += '{code:title=Log Context|borderStyle=solid}\n';
+        logEntriesData.forEach(entry => {
+            const marker = entry.is_issue_line ? '>>> ' : '    ';
+            const timestamp = entry.timestamp ? entry.timestamp.split(' ')[1] : '--:--:--';
+            const service = entry.service || '-';
+            jiraDesc += `${marker}[${entry.line_number}] ${timestamp} [${entry.severity}] [${service}] ${entry.message || entry.raw_content}\n`;
+        });
+        jiraDesc += '{code}\n\n';
+
+        if (issueLines.length > 0) {
+            jiraDesc += '*Issue Lines (marked with >>>):*\n';
+            issueLines.forEach(entry => {
+                const msgPreview = (entry.message || entry.raw_content).substring(0, 100);
+                const ellipsis = (entry.message || entry.raw_content).length > 100 ? '...' : '';
+                jiraDesc += `* Line ${entry.line_number}: ` + '{{' + msgPreview + ellipsis + '}}' + '\n';
+            });
+            jiraDesc += '\n';
+        }
+    }
+
+    jiraDesc += `----\n_Generated by Sentinel Logger_`;
+
+    return jiraDesc;
+}
+
+function copyAllToClipboard() {
+    const title = document.getElementById('bug-title').value;
+    const description = buildJiraDescription();
+
+    const fullText = `Summary: ${title}\n\n${description}`;
+
+    navigator.clipboard.writeText(fullText).then(() => {
+        showToast('All fields copied to clipboard!');
+    });
+}
+
+// Log Context state
+let logContextCollapsed = false;
+let currentFilter = 'all';
+
+// Store log entries data for export
+const logEntriesData = [];
+{% if context_entries %}
+{% for entry in context_entries %}
+logEntriesData.push({
+    line_number: {{ entry.line_number }},
+    timestamp: "{{ entry.timestamp.strftime('%Y-%m-%d %H:%M:%S') if entry.timestamp else '' }}",
+    severity: "{{ entry.severity or 'DEBUG' }}",
+    service: "{{ entry.service or '' }}",
+    component: "{{ entry.component or '' }}",
+    message: {{ entry.message | tojson if entry.message else entry.raw_content | tojson }},
+    raw_content: {{ entry.raw_content | tojson }},
+    is_issue_line: {{ 'true' if issue and issue.affected_lines and entry.line_number in (issue.affected_lines | from_json) else 'false' }}
+});
+{% endfor %}
+{% endif %}
+
+function toggleLogContextCollapse() {
+    const logBox = document.getElementById('log-context');
+    const icon = document.getElementById('collapse-icon');
+    const text = document.getElementById('collapse-text');
+
+    logContextCollapsed = !logContextCollapsed;
+
+    if (logContextCollapsed) {
+        logBox.classList.add('collapsed');
+        icon.classList.remove('bi-chevron-down');
+        icon.classList.add('bi-chevron-up');
+        text.textContent = 'Expand';
+    } else {
+        logBox.classList.remove('collapsed');
+        icon.classList.remove('bi-chevron-up');
+        icon.classList.add('bi-chevron-down');
+        text.textContent = 'Collapse';
+    }
+}
+
+function filterLogContext(filter, btn) {
+    currentFilter = filter;
+
+    // Update button states
+    document.querySelectorAll('.log-context-filters .btn').forEach(b => {
+        b.classList.remove('active');
+    });
+    btn.classList.add('active');
+
+    // Apply filter to rows
+    document.querySelectorAll('.log-entry-row').forEach(row => {
+        const severity = row.dataset.severity;
+        const isIssue = row.dataset.isIssue === 'true';
+        let show = false;
+
+        switch (filter) {
+            case 'all':
+                show = true;
+                break;
+            case 'error':
+                show = (severity === 'error' || severity === 'critical');
+                break;
+            case 'warning':
+                show = (severity === 'warning');
+                break;
+            case 'issue':
+                show = isIssue;
+                break;
+        }
+
+        row.classList.toggle('hidden-by-filter', !show);
+    });
+
+    // Update visible count
+    const visibleCount = document.querySelectorAll('.log-entry-row:not(.hidden-by-filter)').length;
+    const totalCount = document.querySelectorAll('.log-entry-row').length;
+
+    if (filter !== 'all' && visibleCount < totalCount) {
+        showToast(`Showing ${visibleCount} of ${totalCount} entries`);
+    }
+}
+
+function getLogContextForJira() {
+    // Build Jira-formatted log context
+    let output = '';
+    const visibleRows = document.querySelectorAll('.log-entry-row:not(.hidden-by-filter)');
+
+    visibleRows.forEach(row => {
+        const lineNum = row.querySelector('.log-entry-line-num').textContent.trim();
+        const timestamp = row.querySelector('.log-entry-timestamp').textContent.trim();
+        const severity = row.dataset.severity.toUpperCase();
+        const service = row.querySelector('.log-entry-service').textContent.trim();
+        const content = row.querySelector('.log-entry-content').textContent.trim();
+        const isIssue = row.dataset.isIssue === 'true';
+
+        // Add marker for issue lines
+        const marker = isIssue ? '>>> ' : '    ';
+        output += `${marker}[${lineNum}] ${timestamp} [${severity}] ${service !== '-' ? '[' + service + ']' : ''} ${content}\n`;
+    });
+
+    return output;
+}
+
+function copyLogContextFormatted() {
+    // Build Jira wiki markup formatted output
+    const issueLines = logEntriesData.filter(e => e.is_issue_line);
+    const errorCount = logEntriesData.filter(e => e.severity === 'ERROR' || e.severity === 'CRITICAL').length;
+    const warningCount = logEntriesData.filter(e => e.severity === 'WARNING').length;
+
+    let output = '*Log Evidence Summary:*\n';
+    output += `* Total lines: ${logEntriesData.length}\n`;
+    if (errorCount > 0) output += `* Errors: ${errorCount}\n`;
+    if (warningCount > 0) output += `* Warnings: ${warningCount}\n`;
+    if (issueLines.length > 0) output += `* Issue lines: ${issueLines.length}\n`;
+    output += '\n';
+
+    output += '{code:title=Log Context|borderStyle=solid}\n';
+
+    logEntriesData.forEach(entry => {
+        const marker = entry.is_issue_line ? '>>> ' : '    ';
+        const timestamp = entry.timestamp ? entry.timestamp.split(' ')[1] : '--:--:--';
+        const service = entry.service || '-';
+        output += `${marker}[${entry.line_number}] ${timestamp} [${entry.severity}] [${service}] ${entry.message || entry.raw_content}\n`;
+    });
+
+    output += '{code}\n';
+
+    if (issueLines.length > 0) {
+        output += '\n*Issue Lines (marked with >>>):*\n';
+        issueLines.forEach(entry => {
+            output += `* Line ${entry.line_number}: ${entry.message || entry.raw_content}\n`;
+        });
+    }
+
+    navigator.clipboard.writeText(output).then(() => {
+        showToast('Jira-formatted log context copied!');
+    });
+}
+
+function copyLogContextPlain() {
+    // Simple plain text format
+    let output = '';
+
+    logEntriesData.forEach(entry => {
+        const timestamp = entry.timestamp ? entry.timestamp.split(' ')[1] : '';
+        output += `${entry.line_number}: ${timestamp ? '[' + timestamp + '] ' : ''}${entry.raw_content}\n`;
+    });
+
+    navigator.clipboard.writeText(output).then(() => {
+        showToast('Plain text log context copied!');
+    });
+}
+
+function copyLogContextJson() {
+    // JSON format for programmatic use
+    const jsonOutput = JSON.stringify(logEntriesData, null, 2);
+
+    navigator.clipboard.writeText(jsonOutput).then(() => {
+        showToast('JSON log context copied!');
+    });
+}
+
+// Legacy function for backward compatibility
+function copyLogContext() {
+    copyLogContextPlain();
+}
+
+function copyField(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+        const original = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check"></i>';
+        btn.classList.add('btn-success');
+        btn.classList.remove('btn-outline-primary');
+
+        setTimeout(() => {
+            btn.innerHTML = original;
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-primary');
+        }, 1500);
+    });
+}
+
+function saveDraft() {
+    const formData = {
+        project: document.getElementById('jira-project').value,
+        title: document.getElementById('bug-title').value,
+        description: document.getElementById('bug-description').value,
+        severity: document.getElementById('bug-severity').value,
+        category: document.getElementById('bug-category').value,
+        steps: document.getElementById('bug-steps').value,
+        expected: document.getElementById('bug-expected').value,
+        actual: document.getElementById('bug-actual').value
+    };
+
+    localStorage.setItem('jira_bug_draft', JSON.stringify(formData));
+    showToast('Draft saved!');
+}
+
+function loadDraft() {
+    const draft = localStorage.getItem('jira_bug_draft');
+    if (draft) {
+        const data = JSON.parse(draft);
+        if (data.project) document.getElementById('jira-project').value = data.project;
+        if (data.title) document.getElementById('bug-title').value = data.title;
+        if (data.description) document.getElementById('bug-description').value = data.description;
+        if (data.severity) document.getElementById('bug-severity').value = data.severity;
+        if (data.category) document.getElementById('bug-category').value = data.category;
+        if (data.steps) document.getElementById('bug-steps').value = data.steps;
+        if (data.expected) document.getElementById('bug-expected').value = data.expected;
+        if (data.actual) document.getElementById('bug-actual').value = data.actual;
+        updatePreview();
+    }
+}
+
+function showToast(message) {
+    // Simple toast notification
+    const toast = document.createElement('div');
+    toast.className = 'position-fixed bottom-0 end-0 p-3';
+    toast.style.zIndex = '11';
+    toast.innerHTML = `
+        <div class="toast show" role="alert">
+            <div class="toast-body">
+                <i class="bi bi-check-circle text-success me-2"></i>${message}
+            </div>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2000);
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    updatePreview();
+    // Check for saved draft
+    if (localStorage.getItem('jira_bug_draft')) {
+        const loadIt = confirm('A saved draft was found. Would you like to load it?');
+        if (loadIt) loadDraft();
+    }
+});
+</script>
+{% endblock %}

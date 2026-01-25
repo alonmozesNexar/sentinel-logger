@@ -1,0 +1,994 @@
+{% extends "base.html" %}
+
+{% block title %}Log Viewer - {{ log_file.original_filename }} - Sentinel Logger{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Service color palette - each service gets a unique color */
+.service-color-0 { background-color: rgba(59, 130, 246, 0.15) !important; border-left: 4px solid #3b82f6 !important; }
+.service-color-1 { background-color: rgba(16, 185, 129, 0.15) !important; border-left: 4px solid #10b981 !important; }
+.service-color-2 { background-color: rgba(245, 158, 11, 0.15) !important; border-left: 4px solid #f59e0b !important; }
+.service-color-3 { background-color: rgba(239, 68, 68, 0.15) !important; border-left: 4px solid #ef4444 !important; }
+.service-color-4 { background-color: rgba(139, 92, 246, 0.15) !important; border-left: 4px solid #8b5cf6 !important; }
+.service-color-5 { background-color: rgba(236, 72, 153, 0.15) !important; border-left: 4px solid #ec4899 !important; }
+.service-color-6 { background-color: rgba(6, 182, 212, 0.15) !important; border-left: 4px solid #06b6d4 !important; }
+.service-color-7 { background-color: rgba(132, 204, 22, 0.15) !important; border-left: 4px solid #84cc16 !important; }
+.service-color-8 { background-color: rgba(249, 115, 22, 0.15) !important; border-left: 4px solid #f97316 !important; }
+.service-color-9 { background-color: rgba(99, 102, 241, 0.15) !important; border-left: 4px solid #6366f1 !important; }
+.service-color-10 { background-color: rgba(20, 184, 166, 0.15) !important; border-left: 4px solid #14b8a6 !important; }
+.service-color-11 { background-color: rgba(168, 85, 247, 0.15) !important; border-left: 4px solid #a855f7 !important; }
+
+/* Service badge colors */
+.service-badge-0 { background-color: #3b82f6 !important; }
+.service-badge-1 { background-color: #10b981 !important; }
+.service-badge-2 { background-color: #f59e0b !important; color: #000 !important; }
+.service-badge-3 { background-color: #ef4444 !important; }
+.service-badge-4 { background-color: #8b5cf6 !important; }
+.service-badge-5 { background-color: #ec4899 !important; }
+.service-badge-6 { background-color: #06b6d4 !important; }
+.service-badge-7 { background-color: #84cc16 !important; color: #000 !important; }
+.service-badge-8 { background-color: #f97316 !important; }
+.service-badge-9 { background-color: #6366f1 !important; }
+.service-badge-10 { background-color: #14b8a6 !important; }
+.service-badge-11 { background-color: #a855f7 !important; }
+
+/* Log entry styling */
+.log-entry {
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+    font-size: 0.85rem;
+    padding: 8px 12px;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    transition: background-color 0.15s;
+}
+
+.log-entry:hover {
+    filter: brightness(0.95);
+}
+
+/* Severity row highlighting */
+.log-entry.severity-error,
+.log-entry.severity-critical {
+    background-color: rgba(239, 68, 68, 0.2) !important;
+    border-left: 4px solid #ef4444 !important;
+}
+
+.log-entry.severity-warning {
+    background-color: rgba(245, 158, 11, 0.2) !important;
+    border-left: 4px solid #f59e0b !important;
+}
+
+.log-entry .line-num {
+    min-width: 50px;
+    color: #6b7280;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.log-entry .timestamp {
+    min-width: 100px;
+    color: #6b7280;
+    flex-shrink: 0;
+}
+
+.log-entry .severity {
+    min-width: 80px;
+    flex-shrink: 0;
+}
+
+.log-entry .service-name {
+    min-width: 120px;
+    flex-shrink: 0;
+}
+
+.log-entry .raw-content {
+    flex: 1;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+/* Service legend */
+.service-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.service-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 2px solid transparent;
+}
+
+.service-legend-item:hover {
+    transform: scale(1.05);
+}
+
+.service-legend-item.active {
+    border-color: #000;
+    font-weight: 600;
+}
+
+.service-legend-item .color-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+/* Quick filter buttons */
+.quick-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.quick-filter-btn {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    border: 1px solid #e5e7eb;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.quick-filter-btn:hover {
+    background: #f3f4f6;
+}
+
+.quick-filter-btn.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+}
+
+/* Dark mode support */
+[data-theme="dark"] .log-entry {
+    border-bottom-color: #374151;
+}
+
+[data-theme="dark"] .log-entry .line-num,
+[data-theme="dark"] .log-entry .timestamp {
+    color: #9ca3af;
+}
+
+[data-theme="dark"] .quick-filter-btn {
+    background: #374151;
+    border-color: #4b5563;
+    color: #e5e7eb;
+}
+
+[data-theme="dark"] .quick-filter-btn:hover {
+    background: #4b5563;
+}
+
+/* Stats card */
+.stats-card {
+    text-align: center;
+    padding: 12px;
+}
+
+.stats-card .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.stats-card .stat-label {
+    font-size: 0.8rem;
+    color: #6b7280;
+    text-transform: uppercase;
+}
+
+/* ============================================
+   Log Minimap - Visual overview of entire log
+   ============================================ */
+.minimap-container {
+    position: fixed;
+    right: 20px;
+    top: 200px;
+    width: 120px;
+    background: var(--bg-secondary, #fff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 100;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.minimap-container.collapsed {
+    width: 40px;
+    height: 40px !important;
+}
+
+.minimap-container.collapsed .minimap-header span,
+.minimap-container.collapsed .minimap-canvas-container,
+.minimap-container.collapsed .minimap-stats {
+    display: none;
+}
+
+.minimap-header {
+    padding: 8px 10px;
+    background: var(--bg-tertiary, #f3f4f6);
+    border-bottom: 1px solid var(--border-color, #e5e7eb);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.minimap-header i {
+    transition: transform 0.3s;
+}
+
+.minimap-container.collapsed .minimap-header i {
+    transform: rotate(180deg);
+}
+
+.minimap-canvas-container {
+    position: relative;
+    padding: 8px;
+}
+
+.minimap-canvas {
+    width: 100%;
+    height: 200px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.minimap-viewport {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    background: rgba(59, 130, 246, 0.2);
+    border: 2px solid #3b82f6;
+    border-radius: 3px;
+    pointer-events: none;
+    transition: top 0.1s ease;
+}
+
+.minimap-stats {
+    padding: 8px 10px;
+    border-top: 1px solid var(--border-color, #e5e7eb);
+    font-size: 0.7rem;
+    display: flex;
+    justify-content: space-around;
+}
+
+.minimap-stat {
+    text-align: center;
+}
+
+.minimap-stat .count {
+    font-weight: 700;
+    display: block;
+}
+
+.minimap-stat .label {
+    color: #6b7280;
+    text-transform: uppercase;
+    font-size: 0.6rem;
+}
+
+.minimap-stat.errors .count { color: #ef4444; }
+.minimap-stat.warnings .count { color: #f59e0b; }
+
+/* Minimap tooltip */
+.minimap-tooltip {
+    position: absolute;
+    left: -10px;
+    transform: translateX(-100%);
+    background: #1f2937;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.minimap-canvas-container:hover .minimap-tooltip {
+    opacity: 1;
+}
+
+/* Dark mode minimap */
+[data-theme="dark"] .minimap-container {
+    background: #1f2937;
+    border-color: #374151;
+}
+
+[data-theme="dark"] .minimap-header {
+    background: #374151;
+    border-color: #4b5563;
+}
+
+/* Responsive - hide on small screens */
+@media (max-width: 1200px) {
+    .minimap-container {
+        display: none;
+    }
+}
+
+/* Jump to line modal */
+.jump-to-line-input {
+    font-size: 1.5rem;
+    text-align: center;
+    font-family: monospace;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('main.analyze', file_id=log_file.id) }}">Analysis</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Log Viewer</li>
+            </ol>
+        </nav>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h1 class="h3 mb-1">
+                    <i class="bi bi-terminal me-2"></i>{{ log_file.original_filename }}
+                </h1>
+                <p class="text-muted mb-0">
+                    View raw log with color-coded services for easy reading
+                </p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('main.analyze', file_id=log_file.id) }}" class="btn btn-outline-primary">
+                    <i class="bi bi-robot me-1"></i>AI Analysis
+                </a>
+                <a href="/api/log-files/{{ log_file.id }}/export/csv" class="btn btn-outline-secondary">
+                    <i class="bi bi-download me-1"></i>Export CSV
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Row -->
+<div class="row mb-4">
+    <div class="col-md-3 col-6">
+        <div class="card stats-card">
+            <div class="stat-value">{{ log_file.total_lines }}</div>
+            <div class="stat-label">Total Lines</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card stats-card">
+            <div class="stat-value text-danger">{{ log_file.error_count }}</div>
+            <div class="stat-label">Errors</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card stats-card">
+            <div class="stat-value text-warning">{{ log_file.warning_count }}</div>
+            <div class="stat-label">Warnings</div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card stats-card">
+            <div class="stat-value text-info">{{ services|length }}</div>
+            <div class="stat-label">Services</div>
+        </div>
+    </div>
+</div>
+
+<!-- Service Legend -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-palette me-2"></i>Services (click to filter)</h5>
+    </div>
+    <div class="card-body">
+        <div class="service-legend" id="serviceLegend">
+            <div class="service-legend-item {% if not current_service %}active{% endif %}"
+                 onclick="filterByService('')" style="background-color: #f3f4f6;">
+                <span class="color-dot" style="background: linear-gradient(45deg, #3b82f6, #10b981, #f59e0b);"></span>
+                <span>All Services</span>
+            </div>
+            {% for svc in services %}
+            <div class="service-legend-item service-color-{{ loop.index0 % 12 }} {% if current_service == svc %}active{% endif %}"
+                 onclick="filterByService('{{ svc }}')"
+                 data-service="{{ svc }}">
+                <span class="color-dot service-badge-{{ loop.index0 % 12 }}"></span>
+                <span>{{ svc }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-funnel me-2"></i>Filters</h5>
+    </div>
+    <div class="card-body">
+        <!-- Quick Severity Filters -->
+        <div class="mb-3">
+            <label class="form-label fw-bold">Quick Filters:</label>
+            <div class="quick-filters">
+                <button type="button" class="quick-filter-btn {% if not current_severity %}active{% endif %}"
+                        onclick="filterBySeverity('')">
+                    All Levels
+                </button>
+                <button type="button" class="quick-filter-btn {% if current_severity == 'ERROR' %}active{% endif %}"
+                        onclick="filterBySeverity('ERROR')">
+                    <i class="bi bi-exclamation-circle text-danger me-1"></i>Errors Only
+                </button>
+                <button type="button" class="quick-filter-btn {% if current_severity == 'WARNING' %}active{% endif %}"
+                        onclick="filterBySeverity('WARNING')">
+                    <i class="bi bi-exclamation-triangle text-warning me-1"></i>Warnings Only
+                </button>
+                <button type="button" class="quick-filter-btn {% if current_severity == 'CRITICAL' %}active{% endif %}"
+                        onclick="filterBySeverity('CRITICAL')">
+                    <i class="bi bi-x-octagon text-dark me-1"></i>Critical Only
+                </button>
+            </div>
+        </div>
+
+        <!-- Search Box -->
+        <form method="get" class="row g-3 align-items-end">
+            <input type="hidden" name="severity" id="severityInput" value="{{ current_severity or '' }}">
+            <input type="hidden" name="service" id="serviceInput" value="{{ current_service or '' }}">
+
+            <div class="col-md-6">
+                <label for="search" class="form-label fw-bold">Search in Logs</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" id="search" name="search"
+                           value="{{ search }}" placeholder="Search for text in logs...">
+                </div>
+            </div>
+            <div class="col-md-2">
+                <label for="per_page" class="form-label fw-bold">Show</label>
+                <select class="form-select" id="per_page" name="per_page">
+                    <option value="50" {% if entries.per_page == 50 %}selected{% endif %}>50 lines</option>
+                    <option value="100" {% if entries.per_page == 100 %}selected{% endif %}>100 lines</option>
+                    <option value="200" {% if entries.per_page == 200 %}selected{% endif %}>200 lines</option>
+                    <option value="500" {% if entries.per_page == 500 %}selected{% endif %}>500 lines</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search me-1"></i>Search
+                </button>
+            </div>
+            <div class="col-md-2">
+                <a href="{{ url_for('main.view_log', file_id=log_file.id) }}" class="btn btn-outline-secondary w-100">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                </a>
+            </div>
+        </form>
+
+        {% if current_severity or current_service or search %}
+        <div class="mt-3">
+            <span class="text-muted">Active filters:</span>
+            {% if current_severity %}
+            <span class="badge bg-primary ms-2">Severity: {{ current_severity }}</span>
+            {% endif %}
+            {% if current_service %}
+            <span class="badge bg-info ms-2">Service: {{ current_service }}</span>
+            {% endif %}
+            {% if search %}
+            <span class="badge bg-secondary ms-2">Search: "{{ search }}"</span>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Log Entries -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>
+            <i class="bi bi-list-ul me-2"></i>
+            Showing {{ ((entries.page - 1) * entries.per_page) + 1 }} -
+            {% set end_count = entries.page * entries.per_page %}
+            {{ end_count if end_count < entries.total else entries.total }} of {{ entries.total }} entries
+        </span>
+        <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary" onclick="toggleTimestamps()" title="Toggle timestamps">
+                <i class="bi bi-clock"></i>
+            </button>
+            <button class="btn btn-outline-secondary" onclick="toggleLineNumbers()" title="Toggle line numbers">
+                <i class="bi bi-123"></i>
+            </button>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div id="logEntries" style="max-height: 70vh; overflow-y: auto;">
+            {% for entry in entries.items %}
+            {% set service_index = services.index(entry.service) if entry.service in services else 0 %}
+            <div class="log-entry service-color-{{ service_index % 12 }} severity-{{ (entry.severity or 'info')|lower }}">
+                <span class="line-num" title="Line {{ entry.line_number }}">{{ entry.line_number }}</span>
+                <span class="timestamp">{{ entry.timestamp.strftime('%H:%M:%S') if entry.timestamp else '' }}</span>
+                <span class="severity">
+                    {% if entry.severity == 'CRITICAL' %}
+                    <span class="badge bg-dark">CRIT</span>
+                    {% elif entry.severity == 'ERROR' %}
+                    <span class="badge bg-danger">ERR</span>
+                    {% elif entry.severity == 'WARNING' %}
+                    <span class="badge bg-warning text-dark">WARN</span>
+                    {% elif entry.severity == 'INFO' %}
+                    <span class="badge bg-info">INFO</span>
+                    {% else %}
+                    <span class="badge bg-secondary">DBG</span>
+                    {% endif %}
+                </span>
+                <span class="service-name">
+                    <span class="badge service-badge-{{ service_index % 12 }}">{{ entry.service or '-' }}</span>
+                </span>
+                <span class="raw-content">{{ entry.raw_content }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="card-footer">
+        <!-- Pagination -->
+        <nav aria-label="Log pagination">
+            <ul class="pagination justify-content-center mb-0">
+                {% if entries.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('main.view_log', file_id=log_file.id, page=1, severity=current_severity, service=current_service, search=search, per_page=entries.per_page) }}">
+                        <i class="bi bi-chevron-double-left"></i>
+                    </a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('main.view_log', file_id=log_file.id, page=entries.prev_num, severity=current_severity, service=current_service, search=search, per_page=entries.per_page) }}">
+                        <i class="bi bi-chevron-left"></i> Prev
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link"><i class="bi bi-chevron-double-left"></i></span>
+                </li>
+                <li class="page-item disabled">
+                    <span class="page-link"><i class="bi bi-chevron-left"></i> Prev</span>
+                </li>
+                {% endif %}
+
+                <li class="page-item disabled">
+                    <span class="page-link bg-primary text-white">Page {{ entries.page }} of {{ entries.pages }}</span>
+                </li>
+
+                {% if entries.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('main.view_log', file_id=log_file.id, page=entries.next_num, severity=current_severity, service=current_service, search=search, per_page=entries.per_page) }}">
+                        Next <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('main.view_log', file_id=log_file.id, page=entries.pages, severity=current_severity, service=current_service, search=search, per_page=entries.per_page) }}">
+                        <i class="bi bi-chevron-double-right"></i>
+                    </a>
+                </li>
+                {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">Next <i class="bi bi-chevron-right"></i></span>
+                </li>
+                <li class="page-item disabled">
+                    <span class="page-link"><i class="bi bi-chevron-double-right"></i></span>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endblock %}
+
+<!-- Log Minimap -->
+<div class="minimap-container" id="minimapContainer">
+    <div class="minimap-header" onclick="toggleMinimap()">
+        <span><i class="bi bi-map me-1"></i>Minimap</span>
+        <i class="bi bi-chevron-right"></i>
+    </div>
+    <div class="minimap-canvas-container">
+        <canvas class="minimap-canvas" id="minimapCanvas"></canvas>
+        <div class="minimap-viewport" id="minimapViewport"></div>
+        <div class="minimap-tooltip" id="minimapTooltip">Line 0</div>
+    </div>
+    <div class="minimap-stats">
+        <div class="minimap-stat errors">
+            <span class="count">{{ log_file.error_count }}</span>
+            <span class="label">Errors</span>
+        </div>
+        <div class="minimap-stat warnings">
+            <span class="count">{{ log_file.warning_count }}</span>
+            <span class="label">Warns</span>
+        </div>
+    </div>
+</div>
+
+<!-- Jump to Line Modal -->
+<div class="modal fade" id="jumpToLineModal" tabindex="-1">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-arrow-down-circle me-2"></i>Jump to Line</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="number" class="form-control jump-to-line-input" id="jumpLineInput"
+                       min="1" max="{{ log_file.total_lines }}" placeholder="Line #">
+                <small class="text-muted d-block mt-2 text-center">Press Enter to jump (1 - {{ log_file.total_lines }})</small>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="jumpToLine()">
+                    <i class="bi bi-arrow-right me-1"></i>Go
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+// ============================================
+// Minimap Data & Configuration
+// ============================================
+const minimapData = {
+    totalLines: {{ log_file.total_lines }},
+    errorCount: {{ log_file.error_count }},
+    warningCount: {{ log_file.warning_count }},
+    currentPage: {{ entries.page }},
+    perPage: {{ entries.per_page }},
+    totalPages: {{ entries.pages }},
+    fileId: {{ log_file.id }}
+};
+
+let minimapLoaded = false;
+let minimapEntries = [];
+
+// Toggle minimap collapse
+function toggleMinimap() {
+    const container = document.getElementById('minimapContainer');
+    container.classList.toggle('collapsed');
+    localStorage.setItem('minimapCollapsed', container.classList.contains('collapsed'));
+}
+
+// Initialize minimap
+async function initMinimap() {
+    const container = document.getElementById('minimapContainer');
+    const canvas = document.getElementById('minimapCanvas');
+    const ctx = canvas.getContext('2d');
+    const viewport = document.getElementById('minimapViewport');
+    const tooltip = document.getElementById('minimapTooltip');
+
+    // Check saved collapse state
+    if (localStorage.getItem('minimapCollapsed') === 'true') {
+        container.classList.add('collapsed');
+    }
+
+    // Set canvas size
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * 2; // For retina
+    canvas.height = rect.height * 2;
+    ctx.scale(2, 2);
+
+    // Fetch minimap data (summary of errors/warnings per line range)
+    try {
+        const response = await fetch(`/api/log-files/${minimapData.fileId}/minimap`);
+        if (response.ok) {
+            const data = await response.json();
+            minimapEntries = data.entries || [];
+            drawMinimap(ctx, canvas, minimapEntries);
+        } else {
+            // Fallback: draw simple representation
+            drawSimpleMinimap(ctx, canvas);
+        }
+    } catch (error) {
+        console.error('Failed to load minimap data:', error);
+        drawSimpleMinimap(ctx, canvas);
+    }
+
+    // Update viewport indicator
+    updateViewport();
+
+    // Canvas click handler - jump to that position
+    canvas.addEventListener('click', function(e) {
+        const rect = canvas.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const percent = y / rect.height;
+        const targetLine = Math.floor(percent * minimapData.totalLines);
+        const targetPage = Math.ceil(targetLine / minimapData.perPage);
+        jumpToPage(targetPage);
+    });
+
+    // Canvas hover handler - show tooltip
+    canvas.addEventListener('mousemove', function(e) {
+        const rect = canvas.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const percent = y / rect.height;
+        const targetLine = Math.floor(percent * minimapData.totalLines) + 1;
+        tooltip.textContent = `Line ${targetLine}`;
+        tooltip.style.top = `${y + 8}px`;
+    });
+
+    // Scroll sync
+    const logContainer = document.getElementById('logEntries');
+    if (logContainer) {
+        logContainer.addEventListener('scroll', updateViewport);
+    }
+}
+
+function drawMinimap(ctx, canvas, entries) {
+    const width = canvas.width / 2;
+    const height = canvas.height / 2;
+    const totalLines = minimapData.totalLines;
+
+    // Background
+    ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'dark' ? '#1f2937' : '#f9fafb';
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw each line as a thin bar
+    if (entries.length === 0) {
+        drawSimpleMinimap(ctx, canvas);
+        return;
+    }
+
+    entries.forEach(entry => {
+        const y = (entry.line / totalLines) * height;
+        const lineHeight = Math.max(1, height / totalLines);
+
+        if (entry.severity === 'ERROR' || entry.severity === 'CRITICAL') {
+            ctx.fillStyle = '#ef4444';
+            ctx.fillRect(0, y, width, Math.max(lineHeight, 2));
+        } else if (entry.severity === 'WARNING') {
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(0, y, width, Math.max(lineHeight, 1.5));
+        } else if (entry.severity === 'INFO') {
+            ctx.fillStyle = '#3b82f6';
+            ctx.fillRect(0, y, width * 0.3, Math.max(lineHeight, 1));
+        }
+    });
+
+    minimapLoaded = true;
+}
+
+function drawSimpleMinimap(ctx, canvas) {
+    const width = canvas.width / 2;
+    const height = canvas.height / 2;
+    const totalLines = minimapData.totalLines;
+
+    // Background
+    ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'dark' ? '#1f2937' : '#f9fafb';
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw approximation based on counts
+    const errorDensity = minimapData.errorCount / totalLines;
+    const warningDensity = minimapData.warningCount / totalLines;
+
+    // Simulate random distribution of errors/warnings
+    for (let i = 0; i < minimapData.errorCount && i < 100; i++) {
+        const y = Math.random() * height;
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(0, y, width, 2);
+    }
+
+    for (let i = 0; i < minimapData.warningCount && i < 100; i++) {
+        const y = Math.random() * height;
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillRect(0, y, width, 1.5);
+    }
+
+    minimapLoaded = true;
+}
+
+function updateViewport() {
+    const viewport = document.getElementById('minimapViewport');
+    const canvas = document.getElementById('minimapCanvas');
+    if (!viewport || !canvas) return;
+
+    const canvasHeight = canvas.getBoundingClientRect().height;
+    const totalPages = minimapData.totalPages;
+    const currentPage = minimapData.currentPage;
+
+    // Calculate viewport position and size
+    const viewportHeight = Math.max(canvasHeight / totalPages, 20);
+    const viewportTop = ((currentPage - 1) / totalPages) * canvasHeight + 8;
+
+    viewport.style.top = `${viewportTop}px`;
+    viewport.style.height = `${viewportHeight}px`;
+}
+
+function jumpToPage(page) {
+    page = Math.max(1, Math.min(page, minimapData.totalPages));
+    const params = new URLSearchParams(window.location.search);
+    params.set('page', page);
+    window.location.href = window.location.pathname + '?' + params.toString();
+}
+
+function jumpToLine() {
+    const input = document.getElementById('jumpLineInput');
+    const line = parseInt(input.value);
+    if (isNaN(line) || line < 1 || line > minimapData.totalLines) {
+        input.classList.add('is-invalid');
+        return;
+    }
+    const targetPage = Math.ceil(line / minimapData.perPage);
+    jumpToPage(targetPage);
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', initMinimap);
+
+// Filter functions
+function filterByService(service) {
+    const params = new URLSearchParams(window.location.search);
+    if (service) {
+        params.set('service', service);
+    } else {
+        params.delete('service');
+    }
+    params.delete('page'); // Reset to page 1
+    window.location.href = window.location.pathname + '?' + params.toString();
+}
+
+function filterBySeverity(severity) {
+    const params = new URLSearchParams(window.location.search);
+    if (severity) {
+        params.set('severity', severity);
+    } else {
+        params.delete('severity');
+    }
+    params.delete('page'); // Reset to page 1
+    window.location.href = window.location.pathname + '?' + params.toString();
+}
+
+// Toggle functions
+let showTimestamps = true;
+let showLineNumbers = true;
+
+function toggleTimestamps() {
+    showTimestamps = !showTimestamps;
+    document.querySelectorAll('.log-entry .timestamp').forEach(el => {
+        el.style.display = showTimestamps ? '' : 'none';
+    });
+}
+
+function toggleLineNumbers() {
+    showLineNumbers = !showLineNumbers;
+    document.querySelectorAll('.log-entry .line-num').forEach(el => {
+        el.style.display = showLineNumbers ? '' : 'none';
+    });
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
+
+    // Press 'e' to filter errors
+    if (e.key === 'e' && !e.ctrlKey && !e.metaKey && !isTyping) {
+        filterBySeverity('ERROR');
+    }
+    // Press 'w' to filter warnings
+    if (e.key === 'w' && !e.ctrlKey && !e.metaKey && !isTyping) {
+        filterBySeverity('WARNING');
+    }
+    // Press 'a' to show all
+    if (e.key === 'a' && !e.ctrlKey && !e.metaKey && !isTyping) {
+        filterBySeverity('');
+    }
+    // Press '/' to focus search
+    if (e.key === '/' && !isTyping) {
+        e.preventDefault();
+        document.getElementById('search').focus();
+    }
+    // Press 'g' to open jump to line modal
+    if (e.key === 'g' && !e.ctrlKey && !e.metaKey && !isTyping) {
+        e.preventDefault();
+        const modal = new bootstrap.Modal(document.getElementById('jumpToLineModal'));
+        modal.show();
+        setTimeout(() => document.getElementById('jumpLineInput').focus(), 100);
+    }
+    // Press 'm' to toggle minimap
+    if (e.key === 'm' && !e.ctrlKey && !e.metaKey && !isTyping) {
+        e.preventDefault();
+        toggleMinimap();
+    }
+    // Press 'n' for next page
+    if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !isTyping) {
+        e.preventDefault();
+        if (minimapData.currentPage < minimapData.totalPages) {
+            jumpToPage(minimapData.currentPage + 1);
+        }
+    }
+    // Press 'p' for previous page
+    if (e.key === 'p' && !e.ctrlKey && !e.metaKey && !isTyping) {
+        e.preventDefault();
+        if (minimapData.currentPage > 1) {
+            jumpToPage(minimapData.currentPage - 1);
+        }
+    }
+    // Press '?' for keyboard shortcuts help
+    if (e.key === '?' && !isTyping) {
+        e.preventDefault();
+        showLogViewerShortcuts();
+    }
+});
+
+// Enter key in jump to line input
+document.getElementById('jumpLineInput')?.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        jumpToLine();
+    }
+});
+
+// Show keyboard shortcuts help
+function showLogViewerShortcuts() {
+    const helpHtml = `
+        <div class="modal fade" id="logViewerShortcutsModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title"><i class="bi bi-keyboard me-2"></i>Keyboard Shortcuts</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <table class="table table-sm">
+                            <thead><tr><th>Key</th><th>Action</th></tr></thead>
+                            <tbody>
+                                <tr><td><kbd>e</kbd></td><td>Show errors only</td></tr>
+                                <tr><td><kbd>w</kbd></td><td>Show warnings only</td></tr>
+                                <tr><td><kbd>a</kbd></td><td>Show all entries</td></tr>
+                                <tr><td><kbd>/</kbd></td><td>Focus search box</td></tr>
+                                <tr><td><kbd>g</kbd></td><td>Jump to line number</td></tr>
+                                <tr><td><kbd>m</kbd></td><td>Toggle minimap</td></tr>
+                                <tr><td><kbd>n</kbd></td><td>Next page</td></tr>
+                                <tr><td><kbd>p</kbd></td><td>Previous page</td></tr>
+                                <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const existing = document.getElementById('logViewerShortcutsModal');
+    if (existing) existing.remove();
+
+    document.body.insertAdjacentHTML('beforeend', helpHtml);
+    const modal = new bootstrap.Modal(document.getElementById('logViewerShortcutsModal'));
+    modal.show();
+}
+
+// Highlight search term if present
+{% if search %}
+document.addEventListener('DOMContentLoaded', function() {
+    const searchTerm = '{{ search }}'.toLowerCase();
+    document.querySelectorAll('.raw-content').forEach(el => {
+        const text = el.textContent;
+        const lowerText = text.toLowerCase();
+        const index = lowerText.indexOf(searchTerm);
+        if (index !== -1) {
+            const before = text.substring(0, index);
+            const match = text.substring(index, index + searchTerm.length);
+            const after = text.substring(index + searchTerm.length);
+            el.innerHTML = before + '<mark class="bg-warning">' + match + '</mark>' + after;
+        }
+    });
+});
+{% endif %}
+</script>
+{% endblock %}

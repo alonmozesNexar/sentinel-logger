@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Bug Report: {{ report.title }} - Sentinel Logger{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('main.bug_reports_list') }}">Bug Reports</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ report.title[:30] }}...</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">{{ report.title }}</h4>
+                {% if report.severity == 'CRITICAL' %}
+                <span class="badge bg-dark">CRITICAL</span>
+                {% elif report.severity == 'HIGH' %}
+                <span class="badge bg-danger">HIGH</span>
+                {% elif report.severity == 'MEDIUM' %}
+                <span class="badge bg-warning text-dark">MEDIUM</span>
+                {% else %}
+                <span class="badge bg-info">LOW</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="bug-report-content">
+                    <pre class="bg-light p-4 rounded" style="white-space: pre-wrap;">{{ report.description }}</pre>
+                </div>
+
+                {% if report.steps_to_reproduce %}
+                <hr>
+                <h5>Steps to Reproduce</h5>
+                <pre class="bg-light p-3 rounded" style="white-space: pre-wrap;">{{ report.steps_to_reproduce }}</pre>
+                {% endif %}
+
+                {% if report.expected_behavior %}
+                <hr>
+                <h5>Expected Behavior</h5>
+                <p>{{ report.expected_behavior }}</p>
+                {% endif %}
+
+                {% if report.log_snippets %}
+                <hr>
+                <h5>Log Snippets</h5>
+                <pre class="bg-dark text-light p-3 rounded" style="white-space: pre-wrap; font-size: 0.85rem;">{{ report.log_snippets }}</pre>
+                {% endif %}
+            </div>
+            <div class="card-footer text-muted">
+                Created: {{ report.created_at.strftime('%Y-%m-%d %H:%M:%S') if report.created_at else 'Unknown' }}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Export Options -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-download me-2"></i>Export</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('main.export_bug_report', report_id=report.id, format='markdown') }}"
+                       class="btn btn-outline-primary">
+                        <i class="bi bi-markdown me-1"></i>Export as Markdown
+                    </a>
+                    <a href="{{ url_for('main.export_bug_report', report_id=report.id, format='json') }}"
+                       class="btn btn-outline-secondary">
+                        <i class="bi bi-filetype-json me-1"></i>Export as JSON
+                    </a>
+                    <a href="{{ url_for('main.export_bug_report', report_id=report.id, format='text') }}"
+                       class="btn btn-outline-secondary">
+                        <i class="bi bi-file-text me-1"></i>Export as Text
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Copy to Clipboard -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-clipboard me-2"></i>Copy for Bug Tracker</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" onclick="copyForJira()">
+                        <i class="bi bi-clipboard me-1"></i>Copy for Jira
+                    </button>
+                    <button class="btn btn-dark" onclick="copyForGitHub()">
+                        <i class="bi bi-github me-1"></i>Copy for GitHub
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="copyToClipboard()">
+                        <i class="bi bi-clipboard me-1"></i>Copy Plain Text
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Related Issue -->
+        {% if report.issue %}
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-link-45deg me-2"></i>Related Issue</h5>
+            </div>
+            <div class="card-body">
+                <a href="{{ url_for('main.issue_detail', issue_id=report.issue.id) }}">
+                    {{ report.issue.title }}
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function copyToClipboard() {
+        const content = `{{ report.title }}\n\n{{ report.description|replace('\n', '\\n')|replace("'", "\\'") }}`;
+        navigator.clipboard.writeText(content).then(() => {
+            showCopySuccess('Plain text');
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+        });
+    }
+
+    async function copyForJira() {
+        try {
+            const response = await fetch('/api/bug-reports/{{ report.id }}/export/jira');
+            const data = await response.json();
+            await navigator.clipboard.writeText(data.content);
+            showCopySuccess('Jira format');
+        } catch (err) {
+            console.error('Failed to copy:', err);
+            alert('Failed to copy');
+        }
+    }
+
+    async function copyForGitHub() {
+        try {
+            const response = await fetch('/api/bug-reports/{{ report.id }}/export/github');
+            const data = await response.json();
+            await navigator.clipboard.writeText(data.content);
+            showCopySuccess('GitHub format');
+        } catch (err) {
+            console.error('Failed to copy:', err);
+            alert('Failed to copy');
+        }
+    }
+
+    function showCopySuccess(format) {
+        const toast = document.createElement('div');
+        toast.className = 'position-fixed bottom-0 end-0 p-3';
+        toast.style.zIndex = '11';
+        toast.innerHTML = `
+            <div class="toast show" role="alert">
+                <div class="toast-header">
+                    <i class="bi bi-check-circle text-success me-2"></i>
+                    <strong class="me-auto">Copied!</strong>
+                    <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+                </div>
+                <div class="toast-body">
+                    ${format} copied to clipboard
+                </div>
+            </div>
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+</script>
+{% endblock %}

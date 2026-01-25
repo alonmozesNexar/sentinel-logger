@@ -1,0 +1,912 @@
+{% extends "base.html" %}
+
+{% block title %}Download from S3 - Sentinel Logger{% endblock %}
+
+{% block extra_css %}
+<style>
+.file-browser {
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: 8px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+.file-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 15px;
+    border-bottom: 1px solid var(--border-color, #dee2e6);
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+.file-item:last-child {
+    border-bottom: none;
+}
+.file-item:hover {
+    background-color: rgba(59, 130, 246, 0.1);
+}
+.file-item.selected {
+    background-color: rgba(59, 130, 246, 0.2);
+    border-left: 3px solid #3b82f6;
+}
+.file-item .file-checkbox {
+    margin-right: 12px;
+}
+.file-item .file-icon {
+    font-size: 1.5rem;
+    margin-right: 12px;
+    color: #6c757d;
+}
+.file-item .file-info {
+    flex: 1;
+}
+.file-item .file-name {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+.file-item .file-meta {
+    font-size: 0.8rem;
+    color: var(--text-muted, #6c757d);
+}
+.file-item .file-size {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.date-chip {
+    display: inline-block;
+    padding: 4px 12px;
+    margin: 3px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid #dee2e6;
+    background: white;
+}
+.date-chip:hover {
+    background: #e9ecef;
+}
+.date-chip.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+}
+.selection-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+.selection-count {
+    font-weight: 500;
+}
+
+/* Download Progress Modal */
+.download-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.download-modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.download-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.download-modal-header i {
+    font-size: 2rem;
+    color: #3b82f6;
+}
+
+.download-modal-header h4 {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.download-progress-bar {
+    height: 24px;
+    background: #e9ecef;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.download-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #10b981);
+    border-radius: 12px;
+    transition: width 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.download-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.download-info-item {
+    background: #f8f9fa;
+    padding: 0.75rem;
+    border-radius: 8px;
+}
+
+.download-info-item .label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 0.25rem;
+}
+
+.download-info-item .value {
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+.download-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.download-status.downloading {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+.download-status.processing {
+    background: #fff3e0;
+    color: #ef6c00;
+}
+
+.download-status.complete {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.download-status.error {
+    background: #ffebee;
+    color: #c62828;
+}
+
+.download-status i {
+    font-size: 1.25rem;
+}
+
+.download-modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('main.upload') }}">Upload</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Download from S3</li>
+            </ol>
+        </nav>
+        <h1 class="h3">
+            <i class="bi bi-cloud-download me-2"></i>Download Logs from S3
+        </h1>
+        <p class="text-muted">Fetch NexarOne camera logs from S3 bucket by serial number</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-9">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-bucket me-2"></i>S3 Log Browser</h5>
+                {% if s3_status.available %}
+                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Connected</span>
+                {% else %}
+                <span class="badge bg-warning"><i class="bi bi-exclamation-triangle me-1"></i>Not Connected</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <!-- S3 Status Alert -->
+                {% if not s3_status.available %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>S3 Not Available:</strong> {{ s3_status.message }}
+                    {% if s3_status.profiles %}
+                    <hr class="my-2">
+                    <p class="mb-1 small"><strong>Available AWS Profiles:</strong></p>
+                    <ul class="mb-2 small">
+                        {% for profile in s3_status.profiles %}
+                        <li>
+                            <code>{{ profile.name }}</code>
+                            {% if profile.is_sso %}<span class="badge bg-info">SSO</span>{% endif %}
+                            {% if profile.role %}<small class="text-muted">({{ profile.role }})</small>{% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    <p class="mb-0 small">
+                        <strong>To login:</strong>
+                        <code>aws sso login --profile {{ s3_status.profiles[0].name }}</code>
+                    </p>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- Search Bar -->
+                <div class="row mb-3">
+                    <div class="col-md-5">
+                        <label for="serial_number" class="form-label">Camera Serial Number</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="serial_number"
+                                   placeholder="Enter serial number" {% if not s3_status.available %}disabled{% endif %}>
+                            <button class="btn btn-primary" type="button" onclick="searchLogs()" id="searchBtn" {% if not s3_status.available %}disabled{% endif %}>
+                                <i class="bi bi-search me-1"></i>Search
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Time Range</label>
+                        <select class="form-select" id="timeRange" onchange="searchLogs()">
+                            <option value="30" selected>Last Month</option>
+                            <option value="7">Last 7 Days</option>
+                            <option value="14">Last 14 Days</option>
+                            <option value="90">Last 3 Months</option>
+                            <option value="365">Last Year</option>
+                            <option value="0">All Time</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Filter by Folder</label>
+                        <div id="dateFilters" class="border rounded p-2" style="min-height: 38px; max-height: 80px; overflow-y: auto;">
+                            <span class="text-muted small">Search to see available folders</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Status Message -->
+                <div id="statusMessage" class="alert d-none mb-3"></div>
+
+                <!-- Selection Bar (shown when files are selected) -->
+                <div id="selectionBar" class="selection-bar d-none">
+                    <div>
+                        <input type="checkbox" id="selectAll" class="form-check-input me-2" onchange="toggleSelectAll()">
+                        <span class="selection-count"><span id="selectedCount">0</span> file(s) selected</span>
+                    </div>
+                    <div>
+                        <button class="btn btn-sm btn-outline-secondary me-2" onclick="clearSelection()">
+                            <i class="bi bi-x-circle me-1"></i>Clear
+                        </button>
+                        <button class="btn btn-sm btn-success" onclick="downloadSelected()" id="downloadSelectedBtn">
+                            <i class="bi bi-download me-1"></i>Download Selected
+                        </button>
+                    </div>
+                </div>
+
+                <!-- File Browser -->
+                <div id="fileBrowser" class="file-browser d-none">
+                    <div id="fileList">
+                        <!-- Files populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div id="emptyState" class="text-center py-5 text-muted">
+                    <i class="bi bi-folder2-open" style="font-size: 4rem;"></i>
+                    <p class="mt-3">Enter a camera serial number and click Search to browse logs</p>
+                </div>
+
+                <!-- Loading State -->
+                <div id="loadingState" class="text-center py-5 d-none">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-3 text-muted">Loading files...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-3">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>Quick Help</h6>
+            </div>
+            <div class="card-body small">
+                <ol class="ps-3 mb-0">
+                    <li class="mb-2">Enter camera serial number</li>
+                    <li class="mb-2">Click Search to browse files</li>
+                    <li class="mb-2">Filter by date if needed</li>
+                    <li class="mb-2">Select files to download</li>
+                    <li>Click Download Selected</li>
+                </ol>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-lightning-charge me-2"></i>Actions</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('main.camera_download') }}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-wifi me-1"></i>Download from Camera
+                    </a>
+                    <a href="{{ url_for('main.upload') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-upload me-1"></i>Upload File
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        {% if s3_status.available %}
+        <div class="card mt-3 border-success">
+            <div class="card-body small">
+                <div class="d-flex align-items-center text-success mb-2">
+                    <i class="bi bi-check-circle-fill me-2"></i>
+                    <strong>Connected to S3</strong>
+                </div>
+                <div class="text-muted">
+                    Bucket: <code>{{ s3_status.bucket }}</code><br>
+                    {% if s3_status.profile %}
+                    Profile: <code>{{ s3_status.profile }}</code>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Hidden form for download (fallback) -->
+<form id="downloadForm" action="{{ url_for('main.s3_download') }}" method="post" style="display: none;">
+    <input type="hidden" name="serial_number" id="form_serial_number">
+    <input type="hidden" name="selected_file" id="form_selected_file">
+    <input type="hidden" name="date" id="form_date">
+</form>
+
+<!-- Download Progress Modal -->
+<div id="downloadModal" class="download-modal" style="display: none;">
+    <div class="download-modal-content">
+        <div class="download-modal-header">
+            <i class="bi bi-cloud-download"></i>
+            <div>
+                <h4>Downloading from S3</h4>
+                <small id="downloadFilename" class="text-muted">filename.log</small>
+            </div>
+        </div>
+
+        <div class="download-progress-bar">
+            <div id="downloadProgressFill" class="download-progress-fill" style="width: 0%;">
+                <span id="downloadProgressText">0%</span>
+            </div>
+        </div>
+
+        <div class="download-info">
+            <div class="download-info-item">
+                <div class="label">Downloaded</div>
+                <div class="value" id="downloadedSize">0 KB</div>
+            </div>
+            <div class="download-info-item">
+                <div class="label">Total Size</div>
+                <div class="value" id="totalSize">-- KB</div>
+            </div>
+            <div class="download-info-item">
+                <div class="label">Speed</div>
+                <div class="value" id="downloadSpeed">-- KB/s</div>
+            </div>
+            <div class="download-info-item">
+                <div class="label">Time Left</div>
+                <div class="value" id="timeLeft">Calculating...</div>
+            </div>
+        </div>
+
+        <div id="downloadStatusBox" class="download-status downloading">
+            <i class="bi bi-arrow-repeat spin"></i>
+            <span id="downloadStatusText">Connecting to S3...</span>
+        </div>
+
+        <div class="download-modal-actions">
+            <button id="cancelDownloadBtn" class="btn btn-outline-secondary" onclick="cancelDownload()">
+                <i class="bi bi-x-circle me-1"></i>Cancel
+            </button>
+            <button id="closeDownloadBtn" class="btn btn-primary" onclick="closeDownloadModal()" style="display: none;">
+                <i class="bi bi-check-circle me-1"></i>Done
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.spin {
+    animation: spin 1s linear infinite;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let allFiles = [];
+let selectedFiles = new Set();
+let availableDates = [];
+let currentDateFilter = '';
+let isLoading = false;
+
+function showStatus(message, type) {
+    const el = document.getElementById('statusMessage');
+    if (el) {
+        el.className = `alert alert-${type}`;
+        el.innerHTML = message;
+        el.classList.remove('d-none');
+    } else {
+        console.log('Status:', type, message);
+    }
+}
+
+function hideStatus() {
+    const el = document.getElementById('statusMessage');
+    if (el) {
+        el.classList.add('d-none');
+    }
+}
+
+function setLoading(loading) {
+    isLoading = loading;
+    document.getElementById('loadingState').classList.toggle('d-none', !loading);
+    document.getElementById('emptyState').classList.toggle('d-none', loading || allFiles.length > 0);
+    document.getElementById('fileBrowser').classList.toggle('d-none', loading || allFiles.length === 0);
+    document.getElementById('searchBtn').disabled = loading;
+}
+
+function searchLogs() {
+    const serialNumber = document.getElementById('serial_number').value.trim();
+    if (!serialNumber) {
+        showStatus('<i class="bi bi-exclamation-circle me-2"></i>Please enter a serial number', 'warning');
+        return;
+    }
+
+    hideStatus();
+    setLoading(true);
+    selectedFiles.clear();
+    updateSelectionUI();
+
+    // Get time range filter
+    const daysBack = parseInt(document.getElementById('timeRange').value) || 0;
+
+    // Fetch files
+    const formData = new FormData();
+    formData.append('serial_number', serialNumber);
+    formData.append('days_back', daysBack);
+
+    fetch('{{ url_for("main.s3_list_logs") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(result => {
+        setLoading(false);
+        if (result.success) {
+            allFiles = result.files;
+
+            // Extract unique dates/folders
+            availableDates = [...new Set(result.files.map(f => f.folder || f.date).filter(d => d))].sort().reverse();
+            renderDateFilters();
+            renderFiles();
+
+            const timeRangeText = daysBack > 0 ? ` (last ${daysBack} days)` : '';
+            if (result.files.length === 0) {
+                showStatus(`<i class="bi bi-info-circle me-2"></i>No logs found for this serial number${timeRangeText}`, 'info');
+            } else {
+                showStatus(`<i class="bi bi-check-circle me-2"></i>Found ${result.files.length} log file(s)${timeRangeText}`, 'success');
+                setTimeout(hideStatus, 3000);
+            }
+        } else {
+            showStatus('<i class="bi bi-x-circle me-2"></i>' + result.message, 'danger');
+        }
+    })
+    .catch(error => {
+        setLoading(false);
+        showStatus('<i class="bi bi-x-circle me-2"></i>Error: ' + error.message, 'danger');
+    });
+}
+
+function renderDateFilters() {
+    const container = document.getElementById('dateFilters');
+    if (availableDates.length === 0) {
+        container.innerHTML = '<span class="text-muted small">No dates available</span>';
+        return;
+    }
+
+    let html = `<span class="date-chip ${!currentDateFilter ? 'active' : ''}" onclick="filterByDate('')">All</span>`;
+    availableDates.forEach(date => {
+        html += `<span class="date-chip ${currentDateFilter === date ? 'active' : ''}" onclick="filterByDate('${date}')">${date}</span>`;
+    });
+    container.innerHTML = html;
+}
+
+function filterByDate(date) {
+    currentDateFilter = date;
+    renderDateFilters();
+    renderFiles();
+}
+
+function renderFiles() {
+    const container = document.getElementById('fileList');
+    const filteredFiles = currentDateFilter
+        ? allFiles.filter(f => f.date === currentDateFilter)
+        : allFiles;
+
+    if (filteredFiles.length === 0) {
+        container.innerHTML = '<div class="text-center py-4 text-muted">No files match the selected filter</div>';
+        document.getElementById('fileBrowser').classList.remove('d-none');
+        return;
+    }
+
+    // Group files by folder
+    const groupedFiles = {};
+    filteredFiles.forEach(file => {
+        const folder = file.folder || file.date || 'Other';
+        if (!groupedFiles[folder]) {
+            groupedFiles[folder] = [];
+        }
+        groupedFiles[folder].push(file);
+    });
+
+    let html = '';
+    const folders = Object.keys(groupedFiles).sort().reverse();
+
+    folders.forEach(folder => {
+        const files = groupedFiles[folder];
+        const folderFileCount = files.length;
+        const folderSelected = files.filter(f => selectedFiles.has(f.key)).length;
+
+        html += `
+            <div class="folder-header" style="background: #f0f4f8; padding: 8px 15px; border-bottom: 1px solid #dee2e6; font-weight: 600; display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                    <i class="bi bi-folder-fill me-2" style="color: #f59e0b;"></i>
+                    ${folder}
+                    <span class="badge bg-secondary ms-2">${folderFileCount} file(s)</span>
+                </div>
+                <button class="btn btn-sm btn-outline-primary" onclick="selectFolder('${folder}')" title="Select all files in this folder">
+                    <i class="bi bi-check2-all me-1"></i>Select All
+                </button>
+            </div>
+        `;
+
+        files.forEach((file) => {
+            const isSelected = selectedFiles.has(file.key);
+            const icon = file.filename.endsWith('.gz') ? 'bi-file-zip' : 'bi-file-text';
+
+            html += `
+                <div class="file-item ${isSelected ? 'selected' : ''}" onclick="toggleFile('${file.key}')" style="padding-left: 40px;">
+                    <input type="checkbox" class="form-check-input file-checkbox"
+                           ${isSelected ? 'checked' : ''}
+                           onclick="event.stopPropagation(); toggleFile('${file.key}')">
+                    <i class="bi ${icon} file-icon"></i>
+                    <div class="file-info">
+                        <div class="file-name">${file.filename}</div>
+                        <div class="file-meta">
+                            <span><i class="bi bi-clock me-1"></i>${formatDate(file.last_modified)}</span>
+                        </div>
+                    </div>
+                    <div class="file-size">${file.size_human}</div>
+                    <button class="btn btn-sm btn-outline-primary ms-2" onclick="event.stopPropagation(); downloadSingleFile('${file.key}')" title="Download this file">
+                        <i class="bi bi-download"></i>
+                    </button>
+                </div>
+            `;
+        });
+    });
+
+    container.innerHTML = html;
+    document.getElementById('fileBrowser').classList.remove('d-none');
+    document.getElementById('emptyState').classList.add('d-none');
+}
+
+function selectFolder(folder) {
+    const folderFiles = allFiles.filter(f => (f.folder || f.date || 'Other') === folder);
+    const allSelected = folderFiles.every(f => selectedFiles.has(f.key));
+
+    if (allSelected) {
+        // Deselect all in folder
+        folderFiles.forEach(f => selectedFiles.delete(f.key));
+    } else {
+        // Select all in folder
+        folderFiles.forEach(f => selectedFiles.add(f.key));
+    }
+
+    renderFiles();
+    updateSelectionUI();
+}
+
+function toggleFile(fileKey) {
+    if (selectedFiles.has(fileKey)) {
+        selectedFiles.delete(fileKey);
+    } else {
+        selectedFiles.add(fileKey);
+    }
+    renderFiles();
+    updateSelectionUI();
+}
+
+function toggleSelectAll() {
+    const filteredFiles = currentDateFilter
+        ? allFiles.filter(f => f.date === currentDateFilter)
+        : allFiles;
+
+    const selectAllCheckbox = document.getElementById('selectAll');
+
+    if (selectAllCheckbox.checked) {
+        filteredFiles.forEach(f => selectedFiles.add(f.key));
+    } else {
+        filteredFiles.forEach(f => selectedFiles.delete(f.key));
+    }
+
+    renderFiles();
+    updateSelectionUI();
+}
+
+function clearSelection() {
+    selectedFiles.clear();
+    document.getElementById('selectAll').checked = false;
+    renderFiles();
+    updateSelectionUI();
+}
+
+function updateSelectionUI() {
+    const count = selectedFiles.size;
+    document.getElementById('selectedCount').textContent = count;
+    document.getElementById('selectionBar').classList.toggle('d-none', count === 0);
+    document.getElementById('downloadSelectedBtn').disabled = count === 0;
+}
+
+// Download progress tracking
+let currentDownloadController = null;
+let downloadStartTime = null;
+
+function showDownloadModal(filename, totalSize) {
+    document.getElementById('downloadModal').style.display = 'flex';
+    document.getElementById('downloadFilename').textContent = filename;
+    document.getElementById('totalSize').textContent = formatBytes(totalSize);
+    document.getElementById('downloadedSize').textContent = '0 KB';
+    document.getElementById('downloadProgressFill').style.width = '0%';
+    document.getElementById('downloadProgressText').textContent = '0%';
+    document.getElementById('downloadSpeed').textContent = '-- KB/s';
+    document.getElementById('timeLeft').textContent = 'Calculating...';
+    document.getElementById('cancelDownloadBtn').style.display = 'inline-block';
+    document.getElementById('closeDownloadBtn').style.display = 'none';
+    setDownloadStatus('downloading', 'Connecting to S3...');
+}
+
+function updateDownloadProgress(downloaded, total, speed) {
+    const percent = total > 0 ? Math.round((downloaded / total) * 100) : 0;
+    document.getElementById('downloadProgressFill').style.width = percent + '%';
+    document.getElementById('downloadProgressText').textContent = percent + '%';
+    document.getElementById('downloadedSize').textContent = formatBytes(downloaded);
+    document.getElementById('downloadSpeed').textContent = formatBytes(speed) + '/s';
+
+    // Calculate time remaining
+    if (speed > 0) {
+        const remaining = (total - downloaded) / speed;
+        document.getElementById('timeLeft').textContent = formatTime(remaining);
+    }
+}
+
+function setDownloadStatus(status, text) {
+    const box = document.getElementById('downloadStatusBox');
+    const textEl = document.getElementById('downloadStatusText');
+    const icon = box.querySelector('i');
+
+    box.className = 'download-status ' + status;
+    textEl.textContent = text;
+
+    if (status === 'downloading') {
+        icon.className = 'bi bi-arrow-repeat spin';
+    } else if (status === 'processing') {
+        icon.className = 'bi bi-gear spin';
+    } else if (status === 'complete') {
+        icon.className = 'bi bi-check-circle-fill';
+    } else if (status === 'error') {
+        icon.className = 'bi bi-x-circle-fill';
+    }
+}
+
+function closeDownloadModal() {
+    document.getElementById('downloadModal').style.display = 'none';
+}
+
+function cancelDownload() {
+    if (currentDownloadController) {
+        currentDownloadController.abort();
+        currentDownloadController = null;
+    }
+    setDownloadStatus('error', 'Download cancelled');
+    setTimeout(closeDownloadModal, 1000);
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function formatTime(seconds) {
+    if (seconds < 60) return Math.round(seconds) + 's';
+    if (seconds < 3600) return Math.round(seconds / 60) + 'm ' + Math.round(seconds % 60) + 's';
+    return Math.round(seconds / 3600) + 'h ' + Math.round((seconds % 3600) / 60) + 'm';
+}
+
+async function downloadWithProgress(fileKey, serialNumber) {
+    const filename = fileKey.split('/').pop();
+    const fileInfo = allFiles.find(f => f.key === fileKey);
+    const totalSize = fileInfo ? fileInfo.size : 0;
+
+    showDownloadModal(filename, totalSize);
+    downloadStartTime = Date.now();
+    currentDownloadController = new AbortController();
+
+    try {
+        setDownloadStatus('downloading', 'Downloading from S3...');
+
+        const formData = new FormData();
+        formData.append('serial_number', serialNumber);
+        formData.append('selected_file', fileKey);
+        formData.append('stream', 'true');
+
+        const response = await fetch('{{ url_for("main.s3_download_stream") }}', {
+            method: 'POST',
+            body: formData,
+            signal: currentDownloadController.signal
+        });
+
+        if (!response.ok) {
+            // Try to get error message from JSON response
+            const contentType = response.headers.get('Content-Type');
+            if (contentType && contentType.includes('application/json')) {
+                const errorData = await response.json();
+                throw new Error('Download failed: ' + (errorData.error || response.statusText));
+            }
+            throw new Error('Download failed: ' + response.statusText);
+        }
+
+        const contentLength = response.headers.get('X-Total-Size') || response.headers.get('Content-Length') || totalSize;
+        const total = parseInt(contentLength) || totalSize;
+
+        const reader = response.body.getReader();
+        const chunks = [];
+        let downloaded = 0;
+        let lastTime = Date.now();
+        let lastDownloaded = 0;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            chunks.push(value);
+            downloaded += value.length;
+
+            // Calculate speed
+            const now = Date.now();
+            const timeDiff = (now - lastTime) / 1000;
+            if (timeDiff >= 0.5) {
+                const speed = (downloaded - lastDownloaded) / timeDiff;
+                updateDownloadProgress(downloaded, total, speed);
+                lastTime = now;
+                lastDownloaded = downloaded;
+            }
+        }
+
+        // Combine chunks and trigger download
+        setDownloadStatus('processing', 'Processing file...');
+        const blob = new Blob(chunks);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename.replace('.gz', '');  // Remove .gz if decompressed
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        // Show complete
+        updateDownloadProgress(total, total, 0);
+        setDownloadStatus('complete', 'Download complete!');
+        document.getElementById('cancelDownloadBtn').style.display = 'none';
+        document.getElementById('closeDownloadBtn').style.display = 'inline-block';
+        document.getElementById('timeLeft').textContent = 'Done!';
+
+        showStatus(`<i class="bi bi-check-circle me-2"></i>Downloaded ${filename} successfully`, 'success');
+        setTimeout(hideStatus, 5000);
+
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            setDownloadStatus('error', 'Download cancelled');
+        } else {
+            setDownloadStatus('error', 'Error: ' + error.message);
+            showStatus(`<i class="bi bi-x-circle me-2"></i>Download failed: ${error.message}`, 'danger');
+        }
+        document.getElementById('cancelDownloadBtn').style.display = 'none';
+        document.getElementById('closeDownloadBtn').style.display = 'inline-block';
+    }
+
+    currentDownloadController = null;
+}
+
+function downloadSingleFile(fileKey) {
+    const serialNumber = document.getElementById('serial_number').value.trim();
+    downloadWithProgress(fileKey, serialNumber);
+}
+
+function downloadSelected() {
+    if (selectedFiles.size === 0) {
+        showStatus('<i class="bi bi-exclamation-circle me-2"></i>Please select at least one file', 'warning');
+        return;
+    }
+
+    const serialNumber = document.getElementById('serial_number').value.trim();
+    if (!serialNumber) {
+        showStatus('<i class="bi bi-exclamation-circle me-2"></i>Serial number is missing', 'warning');
+        return;
+    }
+
+    // Download first selected file with progress
+    const firstFileKey = Array.from(selectedFiles)[0];
+
+    if (selectedFiles.size > 1) {
+        showStatus(`<i class="bi bi-info-circle me-2"></i>Downloading first file. Multi-file download coming soon!`, 'info');
+        setTimeout(hideStatus, 3000);
+    }
+
+    downloadWithProgress(firstFileKey, serialNumber);
+}
+
+function formatDate(isoString) {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    return date.toLocaleString();
+}
+
+// Enter key to search
+document.getElementById('serial_number').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        searchLogs();
+    }
+});
+</script>
+{% endblock %}

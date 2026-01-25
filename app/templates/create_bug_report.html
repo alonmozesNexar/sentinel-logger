@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Create Bug Report - Sentinel Logger{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('main.issues_list') }}">Issues</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('main.issue_detail', issue_id=issue.id) }}">{{ issue.title[:20] }}...</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Create Bug Report</li>
+            </ol>
+        </nav>
+        <h1 class="h3">
+            <i class="bi bi-bug me-2"></i>Create Bug Report
+        </h1>
+        <p class="text-muted">Generate a bug report from the detected issue</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <form action="{{ url_for('main.create_bug_report', issue_id=issue.id) }}" method="post">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-pencil me-2"></i>Bug Report Details</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="template" class="form-label">Template</label>
+                        <select class="form-select" id="template" name="template">
+                            <option value="default">Default (Markdown)</option>
+                            <option value="jira">Jira</option>
+                            <option value="github">GitHub Issues</option>
+                            <option value="minimal">Minimal</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="steps" class="form-label">Steps to Reproduce</label>
+                        <textarea class="form-control" id="steps" name="steps_to_reproduce" rows="4"
+                                  placeholder="1. Step one&#10;2. Step two&#10;3. Step three"></textarea>
+                        <div class="form-text">Describe the steps that led to this issue</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="expected" class="form-label">Expected Behavior</label>
+                        <textarea class="form-control" id="expected" name="expected_behavior" rows="2"
+                                  placeholder="What should have happened?"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="context" class="form-label">Additional Context</label>
+                        <textarea class="form-control" id="context" name="additional_context" rows="3"
+                                  placeholder="Any additional information that might help..."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-eye me-2"></i>Preview</h5>
+                </div>
+                <div class="card-body">
+                    <h5>{{ preview.title }}</h5>
+                    <hr>
+                    <pre class="bg-light p-3 rounded" style="white-space: pre-wrap; font-size: 0.85rem;">{{ preview.description }}</pre>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-check-circle me-1"></i>Create Bug Report
+                </button>
+                <a href="{{ url_for('main.issue_detail', issue_id=issue.id) }}" class="btn btn-outline-secondary">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Issue Summary -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Issue Summary</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Title:</strong> {{ issue.title }}</p>
+                <p>
+                    <strong>Severity:</strong>
+                    {% if issue.severity == 'CRITICAL' %}
+                    <span class="badge bg-dark">CRITICAL</span>
+                    {% elif issue.severity == 'HIGH' %}
+                    <span class="badge bg-danger">HIGH</span>
+                    {% elif issue.severity == 'MEDIUM' %}
+                    <span class="badge bg-warning text-dark">MEDIUM</span>
+                    {% else %}
+                    <span class="badge bg-info">LOW</span>
+                    {% endif %}
+                </p>
+                <p><strong>Category:</strong> {{ issue.category }}</p>
+                <p><strong>Occurrences:</strong> {{ issue.occurrence_count }}</p>
+                <p><strong>Source:</strong> {{ log_file.original_filename }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

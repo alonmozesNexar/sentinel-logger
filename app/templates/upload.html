@@ -1,0 +1,702 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Log File - Sentinel Logger{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ============================================
+   Enhanced Drag & Drop Upload Zone
+   ============================================ */
+.drop-zone {
+    border: 3px dashed var(--border-color, #dee2e6);
+    border-radius: 16px;
+    padding: 40px 30px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: linear-gradient(135deg, var(--bg-tertiary, #f8f9fa) 0%, var(--bg-secondary, #fff) 100%);
+    position: relative;
+    overflow: hidden;
+}
+
+.drop-zone::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg, transparent 48%, rgba(59, 130, 246, 0.1) 50%, transparent 52%);
+    background-size: 30px 30px;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.drop-zone:hover,
+.drop-zone.drag-over {
+    border-color: #3b82f6;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+    transform: scale(1.01);
+}
+
+.drop-zone.drag-over::before {
+    opacity: 1;
+    animation: moveStripes 1s linear infinite;
+}
+
+@keyframes moveStripes {
+    0% { background-position: 0 0; }
+    100% { background-position: 30px 30px; }
+}
+
+.drop-zone-icon {
+    font-size: 4rem;
+    color: #3b82f6;
+    margin-bottom: 1rem;
+    transition: transform 0.3s;
+}
+
+.drop-zone:hover .drop-zone-icon,
+.drop-zone.drag-over .drop-zone-icon {
+    transform: scale(1.1) translateY(-5px);
+}
+
+.drop-zone-text {
+    font-size: 1.1rem;
+    color: var(--text-secondary, #6c757d);
+}
+
+.drop-zone-hint {
+    font-size: 0.85rem;
+    color: var(--text-muted, #adb5bd);
+    margin-top: 0.5rem;
+}
+
+/* File Preview List */
+.file-preview-list {
+    margin-top: 20px;
+}
+
+.file-preview-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg-secondary, #fff);
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    transition: all 0.2s;
+}
+
+.file-preview-item:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.file-preview-item.uploading {
+    background: linear-gradient(90deg, var(--bg-tertiary, #f8f9fa) 0%, rgba(59, 130, 246, 0.1) 50%, var(--bg-tertiary, #f8f9fa) 100%);
+    background-size: 200% 100%;
+    animation: uploadPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes uploadPulse {
+    0%, 100% { background-position: 200% 0; }
+    50% { background-position: 0% 0; }
+}
+
+.file-preview-item.success {
+    border-color: #10b981;
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.file-preview-item.error {
+    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.file-preview-icon {
+    font-size: 2rem;
+    margin-right: 15px;
+    color: #3b82f6;
+}
+
+.file-preview-info {
+    flex: 1;
+}
+
+.file-preview-name {
+    font-weight: 600;
+    color: var(--text-primary, #212529);
+    margin-bottom: 2px;
+}
+
+.file-preview-size {
+    font-size: 0.8rem;
+    color: var(--text-muted, #6c757d);
+}
+
+.file-preview-progress {
+    width: 100%;
+    height: 4px;
+    background: #e5e7eb;
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+}
+
+.file-preview-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #10b981);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.file-preview-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.file-preview-status {
+    font-size: 1.5rem;
+}
+
+/* Upload Summary */
+.upload-summary {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 20px;
+    display: none;
+}
+
+.upload-summary.visible {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.upload-summary-stats {
+    display: flex;
+    justify-content: space-around;
+    text-align: center;
+}
+
+.upload-stat {
+    padding: 10px;
+}
+
+.upload-stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.upload-stat-label {
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+/* Multi-file badge */
+.multi-file-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+/* Dark mode */
+[data-theme="dark"] .drop-zone {
+    background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+    border-color: #374151;
+}
+
+[data-theme="dark"] .drop-zone:hover,
+[data-theme="dark"] .drop-zone.drag-over {
+    border-color: #3b82f6;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%);
+}
+
+[data-theme="dark"] .file-preview-item {
+    background: #1f2937;
+    border-color: #374151;
+}
+
+[data-theme="dark"] .file-preview-progress {
+    background: #374151;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Upload</li>
+            </ol>
+        </nav>
+        <h1 class="h3">
+            <i class="bi bi-upload me-2"></i>Upload Log Files
+            <span class="multi-file-badge ms-2">
+                <i class="bi bi-layers"></i> Multi-file support
+            </span>
+        </h1>
+        <p class="text-muted">Drag & drop one or more log files for instant analysis</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs mb-3" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="file-tab" data-bs-toggle="tab" data-bs-target="#file-upload" type="button" role="tab">
+                    <i class="bi bi-file-earmark-arrow-up me-1"></i>Upload Files
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="paste-tab" data-bs-toggle="tab" data-bs-target="#paste-log" type="button" role="tab">
+                    <i class="bi bi-clipboard me-1"></i>Paste Log Content
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <a class="nav-link" href="{{ url_for('main.camera_download') }}">
+                    <i class="bi bi-camera-video me-1"></i>Download from Camera
+                </a>
+            </li>
+            <li class="nav-item" role="presentation">
+                <a class="nav-link" href="{{ url_for('main.s3_download') }}">
+                    <i class="bi bi-cloud-download me-1"></i>Download from S3
+                </a>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <!-- File Upload Tab -->
+            <div class="tab-pane fade show active" id="file-upload" role="tabpanel">
+                <div class="card">
+                    <div class="card-body">
+                        <!-- Enhanced Drop Zone -->
+                        <div class="drop-zone" id="dropZone">
+                            <i class="bi bi-cloud-arrow-up drop-zone-icon"></i>
+                            <div class="drop-zone-text">
+                                <strong>Drag & drop files here</strong>
+                            </div>
+                            <div class="drop-zone-hint">
+                                or click to browse &bull; Multiple files supported &bull; .log, .txt, .zip, .gz
+                            </div>
+                            <input type="file" id="fileInput" name="file" multiple accept=".log,.txt,.out,.err,.csv,.json,.xml,.zip,.gz,.tar" style="display: none;">
+                        </div>
+
+                        <!-- File Preview List -->
+                        <div class="file-preview-list" id="filePreviewList"></div>
+
+                        <!-- Upload Summary (shown after uploads complete) -->
+                        <div class="upload-summary" id="uploadSummary">
+                            <h5 class="mb-3"><i class="bi bi-check-circle me-2"></i>Upload Complete!</h5>
+                            <div class="upload-summary-stats">
+                                <div class="upload-stat">
+                                    <div class="upload-stat-value" id="summaryTotal">0</div>
+                                    <div class="upload-stat-label">Files Uploaded</div>
+                                </div>
+                                <div class="upload-stat">
+                                    <div class="upload-stat-value" id="summaryErrors">0</div>
+                                    <div class="upload-stat-label">Errors Found</div>
+                                </div>
+                                <div class="upload-stat">
+                                    <div class="upload-stat-value" id="summaryWarnings">0</div>
+                                    <div class="upload-stat-label">Warnings Found</div>
+                                </div>
+                            </div>
+                            <div class="text-center mt-3">
+                                <a href="{{ url_for('main.index') }}" class="btn btn-light">
+                                    <i class="bi bi-arrow-right me-1"></i>View All Files
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Upload Button -->
+                        <div class="d-grid mt-3" id="uploadButtonContainer" style="display: none !important;">
+                            <button type="button" class="btn btn-lg btn-success" id="uploadAllBtn" disabled>
+                                <i class="bi bi-upload me-1"></i>Upload All Files (<span id="fileCount">0</span>)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Paste Log Tab -->
+            <div class="tab-pane fade" id="paste-log" role="tabpanel">
+                <div class="card">
+                    <div class="card-body">
+                        <form action="{{ url_for('main.paste_log') }}" method="post" id="pasteForm">
+                            <div class="mb-3">
+                                <label for="logName" class="form-label">Log name:</label>
+                                <input type="text" name="log_name" id="logName" class="form-control" placeholder="e.g., camera_log_2024-01-15" required>
+                            </div>
+                            <div class="mb-4">
+                                <label for="logContent" class="form-label">Paste log content here:</label>
+                                <textarea name="log_content" id="logContent" class="form-control font-monospace" rows="15" placeholder="Paste your log content here..." required></textarea>
+                            </div>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-lg btn-primary">
+                                    <i class="bi bi-clipboard-check me-1"></i>Analyze Pasted Log
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Supported Formats</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-2"><i class="bi bi-check-circle text-success me-2"></i><strong>All plain text files supported</strong></p>
+                <ul class="list-unstyled mb-0 small text-muted">
+                    <li><i class="bi bi-file-text me-1"></i>.log, .txt, .out, .err, .csv</li>
+                    <li><i class="bi bi-filetype-json me-1"></i>.json, .xml, .html, .md</li>
+                    <li><i class="bi bi-file-zip me-1"></i>.zip, .gz, .tar (auto-extracted)</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Quick Tips</h5>
+            </div>
+            <div class="card-body">
+                <ul class="mb-0 ps-3 small">
+                    <li class="mb-2"><strong>Drag multiple files</strong> at once for batch analysis</li>
+                    <li class="mb-2"><strong>Max 500MB</strong> per file</li>
+                    <li class="mb-2"><strong>Auto-detection</strong> of errors, warnings, and issues</li>
+                    <li class="mb-2"><strong>AI analysis</strong> runs automatically after upload</li>
+                    <li><strong>Keyboard:</strong> Press <kbd>Ctrl</kbd>+<kbd>U</kbd> to upload</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card mt-3 bg-primary text-white">
+            <div class="card-body text-center">
+                <i class="bi bi-stars fs-1 mb-2"></i>
+                <h6>AI-Powered Analysis</h6>
+                <p class="small mb-0 opacity-75">
+                    Every upload is automatically analyzed by AI to find hidden issues and patterns.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ============================================
+// Enhanced Drag & Drop Multi-Upload
+// ============================================
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const previewList = document.getElementById('filePreviewList');
+const uploadBtn = document.getElementById('uploadAllBtn');
+const uploadBtnContainer = document.getElementById('uploadButtonContainer');
+const uploadSummary = document.getElementById('uploadSummary');
+
+let filesToUpload = [];
+
+// Click to browse
+dropZone.addEventListener('click', () => fileInput.click());
+
+// File input change
+fileInput.addEventListener('change', (e) => {
+    handleFiles(e.target.files);
+});
+
+// Drag events
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, preventDefaults, false);
+    document.body.addEventListener(eventName, preventDefaults, false);
+});
+
+function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+['dragenter', 'dragover'].forEach(eventName => {
+    dropZone.addEventListener(eventName, () => {
+        dropZone.classList.add('drag-over');
+    });
+});
+
+['dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, () => {
+        dropZone.classList.remove('drag-over');
+    });
+});
+
+// Handle dropped files
+dropZone.addEventListener('drop', (e) => {
+    const files = e.dataTransfer.files;
+    handleFiles(files);
+});
+
+// Handle files
+function handleFiles(files) {
+    if (files.length === 0) return;
+
+    // Add files to queue
+    Array.from(files).forEach(file => {
+        // Check for duplicates
+        if (!filesToUpload.some(f => f.name === file.name && f.size === file.size)) {
+            filesToUpload.push(file);
+            addFilePreview(file);
+        }
+    });
+
+    updateUploadButton();
+
+    // Auto-upload if enabled (or just one file)
+    if (filesToUpload.length === 1) {
+        uploadAllFiles();
+    } else {
+        uploadBtnContainer.style.display = 'block';
+    }
+}
+
+// Add file preview
+function addFilePreview(file) {
+    const id = `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    file._previewId = id;
+
+    const icon = getFileIcon(file.name);
+    const size = formatFileSize(file.size);
+
+    const html = `
+        <div class="file-preview-item" id="${id}">
+            <div class="file-preview-icon">${icon}</div>
+            <div class="file-preview-info">
+                <div class="file-preview-name">${escapeHtml(file.name)}</div>
+                <div class="file-preview-size">${size}</div>
+                <div class="file-preview-progress" style="display: none;">
+                    <div class="file-preview-progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+            <div class="file-preview-actions">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeFile('${id}')">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+    `;
+
+    previewList.insertAdjacentHTML('beforeend', html);
+}
+
+// Remove file from queue
+function removeFile(id) {
+    filesToUpload = filesToUpload.filter(f => f._previewId !== id);
+    const element = document.getElementById(id);
+    if (element) {
+        element.style.animation = 'fadeIn 0.2s ease reverse';
+        setTimeout(() => element.remove(), 200);
+    }
+    updateUploadButton();
+}
+
+// Update upload button
+function updateUploadButton() {
+    const count = filesToUpload.length;
+    document.getElementById('fileCount').textContent = count;
+    uploadBtn.disabled = count === 0;
+    uploadBtnContainer.style.display = count > 1 ? 'block' : 'none';
+}
+
+// Upload all files
+uploadBtn?.addEventListener('click', uploadAllFiles);
+
+async function uploadAllFiles() {
+    if (filesToUpload.length === 0) return;
+
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading...';
+
+    let successCount = 0;
+    let totalErrors = 0;
+    let totalWarnings = 0;
+
+    for (const file of filesToUpload) {
+        const previewElement = document.getElementById(file._previewId);
+        if (!previewElement) continue;
+
+        // Show uploading state
+        previewElement.classList.add('uploading');
+        const progressContainer = previewElement.querySelector('.file-preview-progress');
+        const progressBar = previewElement.querySelector('.file-preview-progress-bar');
+        const actionsContainer = previewElement.querySelector('.file-preview-actions');
+
+        progressContainer.style.display = 'block';
+        actionsContainer.innerHTML = '<span class="spinner-border spinner-border-sm text-primary"></span>';
+
+        try {
+            // Create form data
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Upload with progress tracking
+            const result = await uploadFile(formData, (progress) => {
+                progressBar.style.width = `${progress}%`;
+            });
+
+            // Success
+            previewElement.classList.remove('uploading');
+            previewElement.classList.add('success');
+            actionsContainer.innerHTML = '<span class="file-preview-status text-success"><i class="bi bi-check-circle-fill"></i></span>';
+
+            if (result.file) {
+                totalErrors += result.file.error_count || 0;
+                totalWarnings += result.file.warning_count || 0;
+
+                // Add link to analyze
+                actionsContainer.innerHTML = `
+                    <a href="/analyze/${result.file.id}" class="btn btn-sm btn-success">
+                        <i class="bi bi-search me-1"></i>Analyze
+                    </a>
+                `;
+            }
+
+            successCount++;
+
+        } catch (error) {
+            // Error
+            previewElement.classList.remove('uploading');
+            previewElement.classList.add('error');
+            actionsContainer.innerHTML = `
+                <span class="file-preview-status text-danger" title="${escapeHtml(error.message)}">
+                    <i class="bi bi-x-circle-fill"></i>
+                </span>
+            `;
+        }
+    }
+
+    // Show summary
+    if (successCount > 0) {
+        document.getElementById('summaryTotal').textContent = successCount;
+        document.getElementById('summaryErrors').textContent = totalErrors;
+        document.getElementById('summaryWarnings').textContent = totalWarnings;
+        uploadSummary.classList.add('visible');
+    }
+
+    // Reset button
+    uploadBtn.disabled = false;
+    uploadBtn.innerHTML = '<i class="bi bi-upload me-1"></i>Upload All Files (<span id="fileCount">0</span>)';
+    filesToUpload = [];
+    updateUploadButton();
+}
+
+// Upload single file with progress
+function uploadFile(formData, onProgress) {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percent = (e.loaded / e.total) * 100;
+                onProgress(percent);
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    resolve(response);
+                } catch {
+                    resolve({ success: true });
+                }
+            } else {
+                reject(new Error(`Upload failed: ${xhr.statusText}`));
+            }
+        });
+
+        xhr.addEventListener('error', () => {
+            reject(new Error('Network error'));
+        });
+
+        xhr.open('POST', '{{ url_for("main.upload") }}');
+        xhr.setRequestHeader('Accept', 'application/json');
+        xhr.send(formData);
+    });
+}
+
+// Helpers
+function getFileIcon(filename) {
+    const ext = filename.split('.').pop().toLowerCase();
+    const icons = {
+        'log': '<i class="bi bi-file-text text-primary"></i>',
+        'txt': '<i class="bi bi-file-text text-secondary"></i>',
+        'json': '<i class="bi bi-filetype-json text-warning"></i>',
+        'xml': '<i class="bi bi-filetype-xml text-danger"></i>',
+        'csv': '<i class="bi bi-file-spreadsheet text-success"></i>',
+        'zip': '<i class="bi bi-file-zip text-info"></i>',
+        'gz': '<i class="bi bi-file-zip text-info"></i>',
+        'tar': '<i class="bi bi-file-zip text-info"></i>'
+    };
+    return icons[ext] || '<i class="bi bi-file-earmark text-muted"></i>';
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Keyboard shortcut: Ctrl+U to upload
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'u') {
+        e.preventDefault();
+        if (filesToUpload.length > 0) {
+            uploadAllFiles();
+        } else {
+            fileInput.click();
+        }
+    }
+});
+
+// Paste support
+document.addEventListener('paste', (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+        if (item.kind === 'file') {
+            const file = item.getAsFile();
+            if (file) {
+                handleFiles([file]);
+            }
+        }
+    }
+});
+</script>
+{% endblock %}
+

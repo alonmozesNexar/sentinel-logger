@@ -1,0 +1,57 @@
+2024-01-15 09:00:01.123 INFO [camera-framework] Camera service initialized
+2024-01-15 09:00:01.234 INFO [rear-camera] Main camera sensor detected: IMX686
+2024-01-15 09:00:01.345 INFO [front-camera] Front camera sensor detected: IMX471
+2024-01-15 09:00:01.456 INFO [isp] Image Signal Processor initialized
+2024-01-15 09:00:01.567 DEBUG [autofocus] AF algorithm loaded: PDAF + CAF
+2024-01-15 09:00:01.678 INFO [auto-exposure] AE engine initialized with default parameters
+2024-01-15 09:00:01.789 INFO [awb] Auto White Balance calibration loaded
+2024-01-15 09:00:02.001 INFO [video-service] Video service started
+2024-01-15 09:00:02.123 INFO [encoder] H.265 hardware encoder initialized
+2024-01-15 09:00:02.234 INFO [preview] Preview pipeline configured: 1920x1080@30fps
+2024-01-15 09:00:03.001 INFO [rear-camera] START_RECORDING command received
+2024-01-15 09:00:03.045 DEBUG [buffer-manager] Allocated 12 frame buffers
+2024-01-15 09:00:03.089 INFO [encoder] Recording started: 4K@60fps HEVC
+2024-01-15 09:00:03.123 INFO [audio-service] Microphone activated
+2024-01-15 09:00:03.234 DEBUG [ois] Optical stabilization enabled
+2024-01-15 09:00:05.456 WARNING [autofocus] AF hunting detected - low light conditions
+2024-01-15 09:00:07.123 WARNING [auto-exposure] Exposure compensation at limit (+2.0 EV)
+2024-01-15 09:00:10.234 ERROR [isp] Frame drop detected - ISP pipeline stall
+2024-01-15 09:00:10.345 WARNING [buffer-manager] Buffer queue nearly full (10/12)
+2024-01-15 09:00:10.456 ERROR [encoder] Encoder buffer overflow - frame skipped
+2024-01-15 09:00:12.567 INFO [autofocus] AF locked successfully
+2024-01-15 09:00:15.001 WARNING [sensor-service] Temperature warning: 45°C
+2024-01-15 09:00:18.234 ERROR [rear-camera] Sensor communication timeout
+2024-01-15 09:00:18.345 CRITICAL [isp] ISP pipeline crash - attempting recovery
+2024-01-15 09:00:18.456 INFO [hal] HAL layer reinitializing camera
+2024-01-15 09:00:19.001 INFO [rear-camera] Sensor reconnected successfully
+2024-01-15 09:00:19.123 INFO [isp] ISP pipeline recovered
+2024-01-15 09:00:25.234 ERROR [memory-card] Write speed degraded: 45MB/s (expected 90MB/s)
+2024-01-15 09:00:25.345 WARNING [video-service] Bitrate reduced due to storage speed
+2024-01-15 09:00:30.001 INFO [face-detection] 2 faces detected in frame
+2024-01-15 09:00:30.123 DEBUG [autofocus] Face tracking AF activated
+2024-01-15 09:00:35.234 WARNING [battery] Battery level: 20%
+2024-01-15 09:00:35.345 INFO [power-service] Power saving mode suggestions displayed
+2024-01-15 09:00:40.001 ERROR [wifi] Connection dropped during live stream
+2024-01-15 09:00:40.123 INFO [network-service] Attempting to reconnect...
+2024-01-15 09:00:42.234 INFO [wifi] WiFi reconnected successfully
+2024-01-15 09:00:45.001 INFO [rear-camera] STOP_RECORDING command received
+2024-01-15 09:00:45.123 INFO [encoder] Finalizing video file...
+2024-01-15 09:00:45.234 DEBUG [metadata] Writing EXIF data
+2024-01-15 09:00:45.345 INFO [thumbnail] Generating thumbnail
+2024-01-15 09:00:46.001 INFO [memory-card] File saved: VID_20240115_090003.mp4 (2.3GB)
+2024-01-15 09:00:46.123 INFO [video-service] Recording completed successfully
+2024-01-15 09:00:50.001 INFO [front-camera] Switching to front camera
+2024-01-15 09:00:50.123 DEBUG [isp] Reconfiguring ISP for front camera
+2024-01-15 09:00:50.234 INFO [face-detection] Beauty mode enabled
+2024-01-15 09:00:51.001 INFO [front-camera] CAPTURE_IMAGE command received
+2024-01-15 09:00:51.123 DEBUG [flash] LED flash triggered
+2024-01-15 09:00:51.234 INFO [jpeg-encoder] Processing 12MP image
+2024-01-15 09:00:51.345 ERROR [hdr] HDR merge failed - motion detected between frames
+2024-01-15 09:00:51.456 INFO [raw-processor] Falling back to single frame processing
+2024-01-15 09:00:52.001 INFO [memory-card] File saved: IMG_20240115_090051.jpg (4.2MB)
+2024-01-15 09:00:55.001 WARNING [sensor-service] Temperature critical: 52°C
+2024-01-15 09:00:55.123 CRITICAL [power-service] Thermal throttling activated
+2024-01-15 09:00:55.234 WARNING [video-service] 4K recording disabled due to temperature
+2024-01-15 09:00:58.001 INFO [display] Screen brightness reduced for thermal management
+2024-01-15 09:01:00.001 DEBUG [driver] Camera driver status: healthy
+2024-01-15 09:01:00.123 INFO [framework] Session statistics: 1 video, 1 photo, 3 errors

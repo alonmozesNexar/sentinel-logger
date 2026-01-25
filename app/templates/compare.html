@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+
+{% block title %}Compare Logs - Sentinel Logger{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Compare Logs</li>
+            </ol>
+        </nav>
+        <h1 class="h3">
+            <i class="bi bi-arrow-left-right me-2"></i>Compare Log Files
+        </h1>
+        <p class="text-muted">Compare two log files to identify differences and trends</p>
+    </div>
+</div>
+
+<!-- File Selection -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-files me-2"></i>Select Files to Compare</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-5">
+                <label for="file1" class="form-label">First Log File (Baseline)</label>
+                <select class="form-select" id="file1">
+                    <option value="">-- Select File --</option>
+                    {% for file in log_files %}
+                    <option value="{{ file.id }}">{{ file.original_filename }} ({{ file.upload_date.strftime('%Y-%m-%d') }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end justify-content-center">
+                <i class="bi bi-arrow-left-right fs-3 text-muted"></i>
+            </div>
+            <div class="col-md-5">
+                <label for="file2" class="form-label">Second Log File (Compare)</label>
+                <select class="form-select" id="file2">
+                    <option value="">-- Select File --</option>
+                    {% for file in log_files %}
+                    <option value="{{ file.id }}">{{ file.original_filename }} ({{ file.upload_date.strftime('%Y-%m-%d') }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="mt-3 text-center">
+            <button class="btn btn-primary" onclick="compareFiles()">
+                <i class="bi bi-arrow-repeat me-1"></i>Compare Files
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Results -->
+<div id="comparisonResults" class="d-none">
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-5">
+            <div class="card h-100" id="file1Card">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="mb-0"><i class="bi bi-file-text me-2"></i><span id="file1Name">File 1</span></h6>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <h4 class="mb-0" id="file1Lines">0</h4>
+                            <small class="text-muted">Lines</small>
+                        </div>
+                        <div class="col-4">
+                            <h4 class="mb-0 text-danger" id="file1Errors">0</h4>
+                            <small class="text-muted">Errors</small>
+                        </div>
+                        <div class="col-4">
+                            <h4 class="mb-0 text-warning" id="file1Warnings">0</h4>
+                            <small class="text-muted">Warnings</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 d-flex align-items-center justify-content-center">
+            <div class="text-center">
+                <div id="errorDiff" class="fs-4 fw-bold">-</div>
+                <small class="text-muted">Error Diff</small>
+            </div>
+        </div>
+        <div class="col-md-5">
+            <div class="card h-100" id="file2Card">
+                <div class="card-header bg-secondary text-white">
+                    <h6 class="mb-0"><i class="bi bi-file-text me-2"></i><span id="file2Name">File 2</span></h6>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <h4 class="mb-0" id="file2Lines">0</h4>
+                            <small class="text-muted">Lines</small>
+                        </div>
+                        <div class="col-4">
+                            <h4 class="mb-0 text-danger" id="file2Errors">0</h4>
+                            <small class="text-muted">Errors</small>
+                        </div>
+                        <div class="col-4">
+                            <h4 class="mb-0 text-warning" id="file2Warnings">0</h4>
+                            <small class="text-muted">Warnings</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Issue Comparison -->
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-check-circle text-success me-2"></i>Common Issues</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush" id="commonIssues">
+                        <li class="list-group-item text-muted">No common issues</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-dash-circle text-primary me-2"></i>Only in File 1</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush" id="onlyFile1">
+                        <li class="list-group-item text-muted">No unique issues</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-plus-circle text-secondary me-2"></i>Only in File 2</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush" id="onlyFile2">
+                        <li class="list-group-item text-muted">No unique issues</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Severity Chart -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Severity Comparison</h6>
+        </div>
+        <div class="card-body">
+            <canvas id="severityChart" height="100"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Empty State -->
+<div id="emptyState" class="text-center py-5">
+    <i class="bi bi-arrow-left-right display-1 text-muted"></i>
+    <h4 class="mt-3">Select Two Files to Compare</h4>
+    <p class="text-muted">Choose a baseline file and a comparison file to see differences</p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let severityChart = null;
+
+async function compareFiles() {
+    const file1 = document.getElementById('file1').value;
+    const file2 = document.getElementById('file2').value;
+
+    if (!file1 || !file2) {
+        alert('Please select both files to compare');
+        return;
+    }
+
+    if (file1 === file2) {
+        alert('Please select two different files');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/compare', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file1_id: file1, file2_id: file2 })
+        });
+
+        const data = await response.json();
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+
+        displayResults(data);
+    } catch (error) {
+        console.error('Comparison failed:', error);
+        alert('Failed to compare files');
+    }
+}
+
+function displayResults(data) {
+    document.getElementById('emptyState').classList.add('d-none');
+    document.getElementById('comparisonResults').classList.remove('d-none');
+
+    // File 1
+    document.getElementById('file1Name').textContent = data.file1.name;
+    document.getElementById('file1Lines').textContent = data.file1.total_lines.toLocaleString();
+    document.getElementById('file1Errors').textContent = data.file1.error_count;
+    document.getElementById('file1Warnings').textContent = data.file1.warning_count;
+
+    // File 2
+    document.getElementById('file2Name').textContent = data.file2.name;
+    document.getElementById('file2Lines').textContent = data.file2.total_lines.toLocaleString();
+    document.getElementById('file2Errors').textContent = data.file2.error_count;
+    document.getElementById('file2Warnings').textContent = data.file2.warning_count;
+
+    // Error diff
+    const errorDiff = data.comparison.error_diff;
+    const errorDiffEl = document.getElementById('errorDiff');
+    if (errorDiff > 0) {
+        errorDiffEl.textContent = '+' + errorDiff;
+        errorDiffEl.className = 'fs-4 fw-bold text-danger';
+    } else if (errorDiff < 0) {
+        errorDiffEl.textContent = errorDiff;
+        errorDiffEl.className = 'fs-4 fw-bold text-success';
+    } else {
+        errorDiffEl.textContent = '0';
+        errorDiffEl.className = 'fs-4 fw-bold text-muted';
+    }
+
+    // Issues lists
+    updateIssueList('commonIssues', data.comparison.common_issues, 'success');
+    updateIssueList('onlyFile1', data.comparison.only_in_file1, 'primary');
+    updateIssueList('onlyFile2', data.comparison.only_in_file2, 'secondary');
+
+    // Chart
+    updateChart(data.file1, data.file2);
+}
+
+function updateIssueList(elementId, issues, badgeType) {
+    const el = document.getElementById(elementId);
+    if (issues.length === 0) {
+        el.innerHTML = '<li class="list-group-item text-muted">None</li>';
+    } else {
+        el.innerHTML = issues.map(issue =>
+            '<li class="list-group-item"><span class="badge bg-' + badgeType + ' me-2">' +
+            issues.indexOf(issue) + 1 + '</span>' + issue + '</li>'
+        ).join('');
+    }
+}
+
+function updateChart(file1, file2) {
+    const ctx = document.getElementById('severityChart').getContext('2d');
+
+    if (severityChart) {
+        severityChart.destroy();
+    }
+
+    severityChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'],
+            datasets: [
+                {
+                    label: file1.name,
+                    data: [
+                        file1.severities.CRITICAL,
+                        file1.severities.ERROR,
+                        file1.severities.WARNING,
+                        file1.severities.INFO,
+                        file1.severities.DEBUG
+                    ],
+                    backgroundColor: 'rgba(13, 110, 253, 0.7)',
+                    borderColor: 'rgba(13, 110, 253, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: file2.name,
+                    data: [
+                        file2.severities.CRITICAL,
+                        file2.severities.ERROR,
+                        file2.severities.WARNING,
+                        file2.severities.INFO,
+                        file2.severities.DEBUG
+                    ],
+                    backgroundColor: 'rgba(108, 117, 125, 0.7)',
+                    borderColor: 'rgba(108, 117, 125, 1)',
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,38 @@
+# Virtual environment
+venv/
+.venv/
+
+# Environment variables
+.env
+
+# Database files
+*.db
+instance/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Uploads (user data)
+uploads/
+
+# Claude
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db

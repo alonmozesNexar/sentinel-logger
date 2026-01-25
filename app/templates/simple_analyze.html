@@ -1,0 +1,475 @@
+{% extends "simple_base.html" %}
+
+{% block title %}Analysis - {{ log_file.original_filename }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .file-header {
+        background: white;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .health-score {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: white;
+    }
+
+    .health-score.good { background: linear-gradient(135deg, #10b981, #34d399); }
+    .health-score.medium { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
+    .health-score.poor { background: linear-gradient(135deg, #ef4444, #f87171); }
+
+    .issue-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 0.5rem;
+    }
+
+    .issue-meta {
+        font-size: 0.8rem;
+        color: #94a3b8;
+    }
+
+    .log-context {
+        background: #1e293b;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 0.8rem;
+        color: #e2e8f0;
+        overflow-x: auto;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    .log-context .line-error { color: #f87171; }
+    .log-context .line-warning { color: #fbbf24; }
+    .log-context .line-info { color: #60a5fa; }
+
+    .filter-pills {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 1.5rem;
+    }
+
+    .filter-pill {
+        padding: 0.5rem 1rem;
+        border-radius: 2rem;
+        border: 2px solid #e2e8f0;
+        background: white;
+        font-weight: 500;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .filter-pill:hover,
+    .filter-pill.active {
+        border-color: var(--primary-color);
+        background: #f0f9ff;
+        color: var(--primary-color);
+    }
+
+    .filter-pill .count {
+        background: #f1f5f9;
+        padding: 0.125rem 0.5rem;
+        border-radius: 1rem;
+        font-size: 0.75rem;
+        margin-left: 0.5rem;
+    }
+
+    .filter-pill.active .count {
+        background: var(--primary-color);
+        color: white;
+    }
+
+    .quick-actions {
+        background: white;
+        border-radius: 1rem;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    .modal-dev-report {
+        background: #1e293b;
+        color: #e2e8f0;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 0.85rem;
+        white-space: pre-wrap;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- File Header -->
+{% set score = health_score.score if health_score is mapping else health_score %}
+<div class="file-header">
+    <div class="row align-items-center">
+        <div class="col-auto">
+            <div class="health-score {% if score >= 80 %}good{% elif score >= 50 %}medium{% else %}poor{% endif %}">
+                {{ score }}
+            </div>
+        </div>
+        <div class="col">
+            <h1 class="h4 mb-1">{{ log_file.original_filename }}</h1>
+            <p class="text-muted mb-0">
+                <i class="bi bi-calendar me-1"></i>{{ log_file.upload_date.strftime('%B %d, %Y at %H:%M') if log_file.upload_date else 'Just uploaded' }}
+                &bull;
+                <i class="bi bi-file-earmark me-1"></i>{{ (log_file.file_size / 1024)|round(1) }} KB
+                &bull;
+                <i class="bi bi-list me-1"></i>{{ log_file.total_lines|default(0) }} lines
+            </p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('main.index') }}" class="action-btn secondary">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="quick-actions">
+    <button class="action-btn primary" onclick="copyAllIssuesReport()">
+        <i class="bi bi-clipboard"></i> Copy Report for Developer
+    </button>
+    <button class="action-btn secondary" onclick="downloadReport()">
+        <i class="bi bi-download"></i> Download Report
+    </button>
+    <a href="{{ url_for('main.view_log', file_id=log_file.id) }}" class="action-btn secondary">
+        <i class="bi bi-file-text"></i> View Full Log
+    </a>
+</div>
+
+<!-- Issue Filters -->
+<div class="filter-pills">
+    <button class="filter-pill active" data-filter="all">
+        All <span class="count">{{ issues|length }}</span>
+    </button>
+    <button class="filter-pill" data-filter="CRITICAL">
+        <i class="bi bi-exclamation-octagon text-danger"></i> Critical
+        <span class="count">{{ issues|selectattr('severity', 'equalto', 'CRITICAL')|list|length }}</span>
+    </button>
+    <button class="filter-pill" data-filter="HIGH">
+        <i class="bi bi-exclamation-triangle text-danger"></i> High
+        <span class="count">{{ issues|selectattr('severity', 'equalto', 'HIGH')|list|length }}</span>
+    </button>
+    <button class="filter-pill" data-filter="MEDIUM">
+        <i class="bi bi-exclamation-circle text-warning"></i> Medium
+        <span class="count">{{ issues|selectattr('severity', 'equalto', 'MEDIUM')|list|length }}</span>
+    </button>
+    <button class="filter-pill" data-filter="LOW">
+        <i class="bi bi-info-circle text-success"></i> Low
+        <span class="count">{{ issues|selectattr('severity', 'equalto', 'LOW')|list|length }}</span>
+    </button>
+</div>
+
+<!-- Issues List -->
+{% if issues %}
+<div id="issuesList">
+    {% for issue in issues %}
+    <div class="issue-card {{ issue.severity|lower }}" data-severity="{{ issue.severity }}">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+                <span class="severity-badge {{ issue.severity|lower }}">
+                    {% if issue.severity == 'CRITICAL' %}
+                    <i class="bi bi-exclamation-octagon"></i>
+                    {% elif issue.severity == 'HIGH' %}
+                    <i class="bi bi-exclamation-triangle"></i>
+                    {% elif issue.severity == 'MEDIUM' %}
+                    <i class="bi bi-exclamation-circle"></i>
+                    {% else %}
+                    <i class="bi bi-info-circle"></i>
+                    {% endif %}
+                    {{ issue.severity }}
+                </span>
+                <span class="ms-2 text-muted small">{{ issue.category }}</span>
+            </div>
+            <button class="action-btn secondary copy-btn" onclick="copyIssueReport({{ issue.id }})">
+                <i class="bi bi-clipboard"></i> Copy for Dev
+            </button>
+        </div>
+
+        <h5 class="issue-title">{{ issue.title }}</h5>
+        <p class="text-muted mb-3">{{ issue.description }}</p>
+
+        <!-- What This Means - Plain Language Explanation -->
+        {% if issue.explanation %}
+        <div class="explanation-box">
+            <h6><i class="bi bi-lightbulb me-1"></i> What This Means</h6>
+            <p>{{ issue.explanation }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Why It Matters -->
+        {% if issue.why_it_matters %}
+        <div class="explanation-box" style="background: #fef2f2;">
+            <h6><i class="bi bi-exclamation-diamond me-1"></i> Why It Matters</h6>
+            <p>{{ issue.why_it_matters }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Suggested Actions -->
+        {% if issue.suggested_actions %}
+        <div class="mt-3">
+            <h6 class="text-muted small text-uppercase mb-2">
+                <i class="bi bi-check2-square me-1"></i> Suggested Actions
+            </h6>
+            {% for action in issue.suggested_actions[:4] %}
+            <div class="action-item">
+                <i class="bi bi-arrow-right-circle"></i>
+                <span>{{ action }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Log Context -->
+        {% if issue.context %}
+        <div class="mt-3">
+            <h6 class="text-muted small text-uppercase mb-2">
+                <i class="bi bi-terminal me-1"></i> Log Evidence
+            </h6>
+            <div class="log-context">
+                {% for line in issue.context.split('\n')[:10] %}
+                <div class="{% if 'ERROR' in line or 'CRITICAL' in line %}line-error{% elif 'WARN' in line %}line-warning{% elif 'INFO' in line %}line-info{% endif %}">{{ line }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Issue Meta -->
+        <div class="issue-meta mt-3 pt-3 border-top">
+            <i class="bi bi-clock me-1"></i>
+            First seen: {{ issue.first_occurrence if issue.first_occurrence else 'Unknown' }}
+            &bull;
+            <i class="bi bi-arrow-repeat me-1"></i>
+            {{ issue.occurrence_count }} occurrence{% if issue.occurrence_count != 1 %}s{% endif %}
+            &bull;
+            Lines: {{ issue.affected_lines|from_json|join(', ') if issue.affected_lines else 'N/A' }}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <i class="bi bi-check-circle icon" style="color: #10b981;"></i>
+    <h3>No Issues Found!</h3>
+    <p>This log file looks clean. No errors, warnings, or issues were detected.</p>
+</div>
+{% endif %}
+
+<!-- Copy Report Modal -->
+<div class="modal fade" id="reportModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-clipboard-check me-2"></i>Report for Developer
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">Copy this report and share it with your development team:</p>
+                <div class="modal-dev-report" id="devReportContent"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="copyReportFromModal()">
+                    <i class="bi bi-clipboard me-1"></i> Copy to Clipboard
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Issues data for JavaScript
+const issuesData = {{ issues|tojson|safe }};
+const logFileName = "{{ log_file.original_filename }}";
+const healthScore = {{ health_score.score if health_score is mapping else health_score }};
+
+// Filter issues
+document.querySelectorAll('.filter-pill').forEach(pill => {
+    pill.addEventListener('click', function() {
+        document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+        this.classList.add('active');
+
+        const filter = this.dataset.filter;
+        document.querySelectorAll('.issue-card').forEach(card => {
+            if (filter === 'all' || card.dataset.severity === filter) {
+                card.style.display = 'block';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    });
+});
+
+// Copy single issue report
+function copyIssueReport(issueId) {
+    const issue = issuesData.find(i => i.id === issueId);
+    if (!issue) return;
+
+    const report = generateSingleIssueReport(issue);
+
+    navigator.clipboard.writeText(report).then(() => {
+        showToast('Issue report copied to clipboard!');
+    });
+}
+
+// Generate report for single issue
+function generateSingleIssueReport(issue) {
+    // Get affected lines - handle both array and string formats
+    let affectedLines = issue.affected_lines;
+    if (typeof affectedLines === 'string') {
+        try { affectedLines = JSON.parse(affectedLines); } catch(e) { affectedLines = []; }
+    }
+    const linesStr = Array.isArray(affectedLines) ? affectedLines.join(', ') : 'N/A';
+
+    return `=== BUG REPORT ===
+FILE: ${logFileName}
+GENERATED: ${new Date().toISOString()}
+
+ISSUE: ${issue.title}
+SEVERITY: ${issue.severity}
+CATEGORY: ${issue.category}
+
+DESCRIPTION:
+${issue.description}
+
+${issue.explanation ? `WHAT THIS MEANS:\n${issue.explanation}\n` : ''}
+${issue.why_it_matters ? `WHY IT MATTERS:\n${issue.why_it_matters}\n` : ''}
+${issue.suggested_actions && issue.suggested_actions.length ? `SUGGESTED ACTIONS:\n${issue.suggested_actions.map(a => '- ' + a).join('\n')}\n` : ''}
+FIRST OCCURRENCE: ${issue.first_occurrence || 'Unknown'}
+LAST OCCURRENCE: ${issue.last_occurrence || 'Unknown'}
+OCCURRENCE COUNT: ${issue.occurrence_count}
+AFFECTED LINES: ${linesStr}
+CONFIDENCE: ${(issue.confidence_score * 100).toFixed(0)}%
+
+LOG EVIDENCE:
+${issue.context || 'See attached log file'}
+
+${issue.technical_details ? `TECHNICAL DETAILS:\n${issue.technical_details}\n` : ''}
+---
+Generated by Log Analyzer`;
+}
+
+// Copy all issues report
+function copyAllIssuesReport() {
+    let report = `=== LOG ANALYSIS REPORT ===
+FILE: ${logFileName}
+HEALTH SCORE: ${healthScore}/100
+GENERATED: ${new Date().toISOString()}
+TOTAL ISSUES: ${issuesData.length}
+
+`;
+
+    // Summary by severity
+    const bySeverity = {
+        CRITICAL: issuesData.filter(i => i.severity === 'CRITICAL').length,
+        HIGH: issuesData.filter(i => i.severity === 'HIGH').length,
+        MEDIUM: issuesData.filter(i => i.severity === 'MEDIUM').length,
+        LOW: issuesData.filter(i => i.severity === 'LOW').length
+    };
+
+    report += `SUMMARY:
+- Critical: ${bySeverity.CRITICAL}
+- High: ${bySeverity.HIGH}
+- Medium: ${bySeverity.MEDIUM}
+- Low: ${bySeverity.LOW}
+
+`;
+
+    // Individual issues
+    report += `=== ISSUES DETAIL ===\n\n`;
+
+    issuesData.forEach((issue, index) => {
+        const context = issue.context ? JSON.parse(issue.context) : {};
+        const enhanced = context.enhanced || {};
+
+        report += `--- Issue #${index + 1} ---
+SEVERITY: ${issue.severity}
+TITLE: ${issue.title}
+CATEGORY: ${issue.category}
+
+${issue.description}
+
+${enhanced.explanation ? `What This Means: ${enhanced.explanation}\n` : ''}
+First Seen: ${issue.first_occurrence || 'Unknown'}
+Occurrences: ${issue.occurrence_count}
+Lines: ${JSON.parse(issue.affected_lines || '[]').join(', ') || 'N/A'}
+
+Log Evidence:
+${context.log_context || 'N/A'}
+
+`;
+    });
+
+    report += `\n---\nGenerated by Log Analyzer`;
+
+    // Show modal with report
+    document.getElementById('devReportContent').textContent = report;
+    new bootstrap.Modal(document.getElementById('reportModal')).show();
+}
+
+// Copy from modal
+function copyReportFromModal() {
+    const report = document.getElementById('devReportContent').textContent;
+    navigator.clipboard.writeText(report).then(() => {
+        showToast('Full report copied to clipboard!');
+    });
+}
+
+// Download report
+function downloadReport() {
+    let report = `LOG ANALYSIS REPORT\n`;
+    report += `File: ${logFileName}\n`;
+    report += `Health Score: ${healthScore}/100\n`;
+    report += `Generated: ${new Date().toISOString()}\n`;
+    report += `Total Issues: ${issuesData.length}\n\n`;
+
+    issuesData.forEach((issue, index) => {
+        const context = issue.context ? JSON.parse(issue.context) : {};
+        report += `\n[Issue ${index + 1}] ${issue.severity} - ${issue.title}\n`;
+        report += `${issue.description}\n`;
+        report += `First Seen: ${issue.first_occurrence || 'Unknown'}\n`;
+        report += `Occurrences: ${issue.occurrence_count}\n`;
+        if (context.log_context) {
+            report += `Log:\n${context.log_context}\n`;
+        }
+        report += `---\n`;
+    });
+
+    const blob = new Blob([report], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${logFileName.replace(/\.[^/.]+$/, '')}_report.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showToast('Report downloaded!');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,429 @@
+{% extends "base.html" %}
+
+{% block title %}Issue: {{ issue.title }} - Sentinel Logger{% endblock %}
+
+{% block extra_css %}
+<style>
+.explanation-panel {
+    background-color: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.explanation-panel h6 {
+    color: #495057;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+}
+
+.action-checklist {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.action-checklist li {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    align-items: flex-start;
+}
+
+.action-checklist li:last-child {
+    border-bottom: none;
+}
+
+.action-checklist .action-icon {
+    color: #0d6efd;
+    margin-right: 0.75rem;
+    margin-top: 2px;
+}
+
+.action-checklist .action-checkbox {
+    margin-right: 0.75rem;
+    margin-top: 2px;
+}
+
+.severity-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 0.5rem;
+}
+
+.severity-indicator.critical { background-color: #dc3545; }
+.severity-indicator.high { background-color: #fd7e14; }
+.severity-indicator.medium { background-color: #ffc107; }
+.severity-indicator.low { background-color: #17a2b8; }
+
+.context-row {
+    transition: background-color 0.2s;
+}
+
+.context-row:hover {
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+.context-row.highlighted {
+    background-color: rgba(220, 53, 69, 0.15) !important;
+}
+
+.technical-details {
+    background-color: #343a40;
+    color: #f8f9fa;
+    border-radius: 0.375rem;
+    padding: 1rem;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.85rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('main.analyze', file_id=log_file.id) }}">{{ log_file.original_filename }}</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ issue.title[:40] }}...</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Issue Details -->
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    {% if issue.severity == 'CRITICAL' %}
+                    <span class="badge bg-dark me-2">CRITICAL</span>
+                    {% elif issue.severity == 'HIGH' %}
+                    <span class="badge bg-danger me-2">HIGH</span>
+                    {% elif issue.severity == 'MEDIUM' %}
+                    <span class="badge bg-warning text-dark me-2">MEDIUM</span>
+                    {% else %}
+                    <span class="badge bg-info me-2">LOW</span>
+                    {% endif %}
+                    <span class="badge bg-secondary">{{ issue.category|replace('_', ' ')|title }}</span>
+                </div>
+                <div>
+                    {% if issue.status == 'open' %}
+                    <span class="badge bg-danger">Open</span>
+                    {% elif issue.status == 'acknowledged' %}
+                    <span class="badge bg-warning text-dark">Acknowledged</span>
+                    {% else %}
+                    <span class="badge bg-success">Resolved</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <h4 class="mb-3">{{ issue.title }}</h4>
+
+                <!-- What This Means (Beginner Explanation) -->
+                <div class="explanation-panel">
+                    <h6><i class="bi bi-lightbulb me-1"></i>What This Means</h6>
+                    <p class="mb-0">{{ explanation if explanation else issue.description }}</p>
+                </div>
+
+                <!-- Why It Matters -->
+                {% if why_it_matters %}
+                <div class="explanation-panel bg-warning bg-opacity-10">
+                    <h6><i class="bi bi-exclamation-circle me-1"></i>Why It Matters</h6>
+                    <p class="mb-0">{{ why_it_matters }}</p>
+                </div>
+                {% endif %}
+
+                <hr>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-clock me-2"></i>First Occurrence</h6>
+                        <p>{{ issue.first_occurrence.strftime('%Y-%m-%d %H:%M:%S') if issue.first_occurrence else 'Unknown' }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-clock-history me-2"></i>Last Occurrence</h6>
+                        <p>{{ issue.last_occurrence.strftime('%Y-%m-%d %H:%M:%S') if issue.last_occurrence else 'Unknown' }}</p>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-hash me-2"></i>Occurrence Count</h6>
+                        <p><strong class="text-danger fs-5">{{ issue.occurrence_count }}</strong> times</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-percent me-2"></i>Detection Confidence</h6>
+                        <div class="progress" style="height: 24px;">
+                            <div class="progress-bar {% if issue.confidence_score >= 0.8 %}bg-success{% elif issue.confidence_score >= 0.5 %}bg-warning{% else %}bg-danger{% endif %}"
+                                 role="progressbar"
+                                 style="width: {{ (issue.confidence_score * 100)|int }}%;">
+                                {{ (issue.confidence_score * 100)|int }}%
+                            </div>
+                        </div>
+                        <small class="text-muted">Higher is more certain</small>
+                    </div>
+                </div>
+
+                <!-- Technical Details (Advanced) -->
+                {% if technical_details %}
+                <div class="mt-4">
+                    <h6><i class="bi bi-code-square me-2"></i>Technical Details</h6>
+                    <div class="technical-details">
+                        {{ technical_details }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Log Context -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-terminal me-2"></i>Log Context</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="copyContext()">
+                        <i class="bi bi-clipboard"></i> Copy
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0" id="contextTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th width="70">Line</th>
+                                <th width="90">Severity</th>
+                                <th width="120">Service</th>
+                                <th>Content</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for entry in context_entries %}
+                            <tr class="context-row {% if entry.line_number in affected_lines %}highlighted{% endif %}">
+                                <td class="font-monospace text-muted">{{ entry.line_number }}</td>
+                                <td>
+                                    {% if entry.severity == 'CRITICAL' %}
+                                    <span class="badge bg-dark">CRIT</span>
+                                    {% elif entry.severity == 'ERROR' %}
+                                    <span class="badge bg-danger">ERR</span>
+                                    {% elif entry.severity == 'WARNING' %}
+                                    <span class="badge bg-warning text-dark">WARN</span>
+                                    {% elif entry.severity == 'INFO' %}
+                                    <span class="badge bg-info">INFO</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">DBG</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-muted small">{{ entry.service or '-' }}</td>
+                                <td class="font-monospace small">{{ entry.raw_content }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer d-flex justify-content-between align-items-center">
+                <a href="{{ url_for('main.view_log', file_id=log_file.id) }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-eye me-1"></i>View Full Log
+                </a>
+                <small class="text-muted">
+                    <i class="bi bi-info-circle"></i> Red highlighted rows indicate affected lines
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="col-lg-4">
+        <!-- What To Do (Suggested Actions) -->
+        {% if suggested_actions %}
+        <div class="card mb-4 border-primary">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-check2-square me-2"></i>What To Do</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">Follow these steps to investigate and resolve this issue:</p>
+                <ul class="action-checklist">
+                    {% for action in suggested_actions %}
+                    <li>
+                        <input type="checkbox" class="form-check-input action-checkbox" id="action{{ loop.index }}">
+                        <label for="action{{ loop.index }}">{{ action }}</label>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Actions -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('main.create_jira_bug', issue_id=issue.id) }}" class="btn btn-primary">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>Create Jira Bug
+                    </a>
+                    <a href="{{ url_for('main.create_bug_report', issue_id=issue.id) }}" class="btn btn-outline-success">
+                        <i class="bi bi-bug me-1"></i>Create Local Report
+                    </a>
+                    {% if issue.status == 'open' %}
+                    <button class="btn btn-outline-warning" onclick="updateStatus('acknowledged')">
+                        <i class="bi bi-check me-1"></i>Mark as Acknowledged
+                    </button>
+                    {% endif %}
+                    {% if issue.status != 'resolved' %}
+                    <button class="btn btn-outline-secondary" onclick="updateStatus('resolved')">
+                        <i class="bi bi-check-all me-1"></i>Mark as Resolved
+                    </button>
+                    {% endif %}
+                    {% if issue.status != 'open' %}
+                    <button class="btn btn-outline-danger" onclick="updateStatus('open')">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Reopen Issue
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Source File -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-file-text me-2"></i>Source File</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-2">
+                    <strong>{{ log_file.original_filename }}</strong>
+                </p>
+                <p class="text-muted small mb-3">
+                    <i class="bi bi-list-ol me-1"></i>{{ log_file.total_lines }} lines
+                    <span class="mx-1">|</span>
+                    <i class="bi bi-file-earmark me-1"></i>{{ (log_file.file_size / 1024)|round(1) }} KB
+                </p>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('main.analyze', file_id=log_file.id) }}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-search me-1"></i>Analysis
+                    </a>
+                    <a href="{{ url_for('main.view_log', file_id=log_file.id) }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-terminal me-1"></i>Full Log
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Affected Lines -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-list-ol me-2"></i>Affected Lines</h5>
+            </div>
+            <div class="card-body">
+                {% if affected_lines %}
+                <div class="d-flex flex-wrap gap-1">
+                    {% for line in affected_lines[:20] %}
+                    <a href="{{ url_for('main.view_log', file_id=log_file.id) }}?search={{ line }}"
+                       class="badge bg-danger text-decoration-none"
+                       title="Go to line {{ line }}">{{ line }}</a>
+                    {% endfor %}
+                    {% if affected_lines|length > 20 %}
+                    <span class="badge bg-secondary">+{{ affected_lines|length - 20 }} more</span>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No specific lines recorded</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Severity Guide -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-question-circle me-2"></i>Severity Guide</h5>
+            </div>
+            <div class="card-body small">
+                {% if issue.severity == 'CRITICAL' %}
+                <div class="alert alert-dark mb-0">
+                    <strong>Critical:</strong> Severe issue that may cause data loss or system failure.
+                    <br><em>Priority: Fix immediately</em>
+                </div>
+                {% elif issue.severity == 'HIGH' %}
+                <div class="alert alert-danger mb-0">
+                    <strong>High:</strong> Major feature is broken or not working correctly.
+                    <br><em>Priority: Fix soon</em>
+                </div>
+                {% elif issue.severity == 'MEDIUM' %}
+                <div class="alert alert-warning mb-0">
+                    <strong>Medium:</strong> Feature works but with degraded performance or quality.
+                    <br><em>Priority: Plan to fix</em>
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-0">
+                    <strong>Low:</strong> Minor issue or edge case. Most users won't notice.
+                    <br><em>Priority: Nice to fix</em>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function updateStatus(status) {
+        fetch(`/api/issues/{{ issue.id }}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ status: status })
+        })
+        .then(response => response.json())
+        .then(data => {
+            location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to update status');
+        });
+    }
+
+    function copyContext() {
+        const table = document.getElementById('contextTable');
+        const rows = table.querySelectorAll('tbody tr');
+        let text = '';
+
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            const line = cells[0]?.textContent?.trim() || '';
+            const severity = cells[1]?.textContent?.trim() || '';
+            const service = cells[2]?.textContent?.trim() || '';
+            const content = cells[3]?.textContent?.trim() || '';
+            text += `${line}\t${severity}\t${service}\t${content}\n`;
+        });
+
+        navigator.clipboard.writeText(text).then(() => {
+            alert('Context copied to clipboard!');
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+        });
+    }
+
+    // Persist action checkboxes in localStorage
+    document.querySelectorAll('.action-checkbox').forEach(checkbox => {
+        const key = `issue_{{ issue.id }}_action_${checkbox.id}`;
+        checkbox.checked = localStorage.getItem(key) === 'true';
+
+        checkbox.addEventListener('change', () => {
+            localStorage.setItem(key, checkbox.checked);
+        });
+    });
+</script>
+{% endblock %}
