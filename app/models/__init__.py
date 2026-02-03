@@ -1,12 +1,30 @@
 """
 Database models for Sentinel Logger
 """
-from app import db
-from datetime import datetime
 import json
+import logging
+from datetime import datetime
+
+from app import db
 
 # Import additional models
 from app.models.saved_query import SavedQuery, LogAnnotation, SharedAnalysis, JiraConfig
+
+logger = logging.getLogger(__name__)
+
+
+def safe_json_loads(data, default=None, context=""):
+    """
+    Safely parse JSON data, returning default on failure.
+    Logs errors for debugging.
+    """
+    if data is None:
+        return default if default is not None else []
+    try:
+        return json.loads(data)
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.warning(f"Invalid JSON in {context}: {str(e)[:100]}")
+        return default if default is not None else []
 
 
 class LogFile(db.Model):
@@ -42,7 +60,7 @@ class LogFile(db.Model):
             'warning_count': self.warning_count,
             'info_count': self.info_count,
             'parsed': self.parsed,
-            'device_info': json.loads(self.device_info) if self.device_info else None
+            'device_info': safe_json_loads(self.device_info, default=None, context=f"LogFile.device_info id={self.id}")
         }
 
 
@@ -112,7 +130,7 @@ class Issue(db.Model):
             'first_occurrence': self.first_occurrence.isoformat() if self.first_occurrence else None,
             'last_occurrence': self.last_occurrence.isoformat() if self.last_occurrence else None,
             'occurrence_count': self.occurrence_count,
-            'affected_lines': json.loads(self.affected_lines) if self.affected_lines else [],
+            'affected_lines': safe_json_loads(self.affected_lines, default=[], context=f"Issue.affected_lines id={self.id}"),
             'context': self.context,
             'confidence_score': self.confidence_score,
             'status': self.status,
@@ -150,7 +168,7 @@ class BugReport(db.Model):
             'expected_behavior': self.expected_behavior,
             'actual_behavior': self.actual_behavior,
             'severity': self.severity,
-            'environment': json.loads(self.environment) if self.environment else None,
+            'environment': safe_json_loads(self.environment, default=None, context=f"BugReport.environment id={self.id}"),
             'log_snippets': self.log_snippets,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'exported': self.exported,
@@ -177,9 +195,10 @@ class AIAnalysisCache(db.Model):
     # Relationship
     log_file = db.relationship('LogFile', backref=db.backref('ai_analyses', lazy='dynamic', cascade='all, delete-orphan'))
 
-    # Index for faster lookups
+    # Index for faster lookups and unique constraint to prevent race condition duplicates
     __table_args__ = (
         db.Index('idx_logfile_query', 'log_file_id', 'query_hash'),
+        db.UniqueConstraint('log_file_id', 'query_hash', name='uq_logfile_query_hash'),
     )
 
     def to_dict(self):
@@ -188,7 +207,7 @@ class AIAnalysisCache(db.Model):
             'log_file_id': self.log_file_id,
             'query': self.query,
             'analysis_result': self.analysis_result,
-            'relevant_logs': json.loads(self.relevant_logs) if self.relevant_logs else [],
+            'relevant_logs': safe_json_loads(self.relevant_logs, default=[], context=f"AIAnalysisCache.relevant_logs id={self.id}"),
             'providers_used': self.providers_used.split(',') if self.providers_used else [],
             'provider_count': self.provider_count,
             'logs_analyzed': self.logs_analyzed,

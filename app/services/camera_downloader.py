@@ -3,6 +3,8 @@ Camera Log Downloader Service
 Downloads log files from camera devices via SSH
 """
 import logging
+import re
+import shlex
 import socket
 from datetime import datetime
 from io import BytesIO
@@ -11,6 +13,40 @@ from pathlib import Path
 import paramiko
 
 logger = logging.getLogger(__name__)
+
+# Allowed directories for listing files (security: prevent directory traversal)
+ALLOWED_LOG_DIRECTORIES = ['/var/log', '/data/log', '/tmp', '/var/tmp']
+
+def _sanitize_path(path: str) -> str:
+    """
+    Sanitize a file path to prevent command injection and directory traversal.
+    Returns the sanitized path or raises ValueError if path is invalid.
+    """
+    # Remove any shell metacharacters
+    if not path:
+        raise ValueError("Path cannot be empty")
+
+    # Check for command injection attempts
+    dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '{', '}', '<', '>', '\n', '\r']
+    for char in dangerous_chars:
+        if char in path:
+            raise ValueError(f"Invalid character in path: {char}")
+
+    # Normalize the path and check for directory traversal
+    normalized = str(Path(path).resolve()) if not path.startswith('/') else path
+
+    # Ensure no directory traversal attempts
+    if '..' in path:
+        raise ValueError("Directory traversal not allowed")
+
+    return path
+
+
+def _is_allowed_directory(directory: str) -> bool:
+    """Check if directory is in the allowed list for listing operations."""
+    normalized = directory.rstrip('/')
+    return any(normalized == allowed or normalized.startswith(allowed + '/')
+               for allowed in ALLOWED_LOG_DIRECTORIES)
 
 
 class CameraDownloader:
@@ -73,11 +109,16 @@ class CameraDownloader:
         except paramiko.AuthenticationException:
             return False, "Authentication failed. Check username/password."
         except paramiko.SSHException as e:
-            return False, f"SSH error: {str(e)}"
+            # Log full error for debugging, return generic message to user
+            logger.error(f"SSH connection error to {self.host}: {str(e)}")
+            return False, "SSH connection error. Check camera is accessible and SSH is enabled."
         except socket.error as e:
-            return False, f"Network error: {str(e)}. Is the camera reachable at {self.host}?"
+            # Log full error for debugging, return generic message to user
+            logger.error(f"Network error connecting to {self.host}: {str(e)}")
+            return False, "Network error. Check camera is connected and IP address is correct."
         except Exception as e:
-            return False, f"Connection failed: {str(e)}"
+            logger.error(f"Connection failed to {self.host}: {str(e)}")
+            return False, "Connection failed. Please check camera settings and try again."
 
     def disconnect(self):
         """Close SSH connection"""
@@ -98,16 +139,23 @@ class CameraDownloader:
     def download_log(self, remote_path='/var/log/messages'):
         """Download log file from camera using paramiko SSH"""
         try:
+            # Sanitize the remote path to prevent command injection
+            try:
+                remote_path = _sanitize_path(remote_path)
+            except ValueError as e:
+                return None, f"Invalid path: {str(e)}"
+
             # Connect if not already connected
             if not self.client or not self.transport:
                 success, msg = self.connect()
                 if not success:
                     return None, msg
 
-            # Execute cat command to read the file
+            # Execute cat command to read the file using shell quoting for safety
             try:
+                safe_path = shlex.quote(remote_path)
                 stdin, stdout, stderr = self.client.exec_command(
-                    f'cat {remote_path}',
+                    f'cat {safe_path}',
                     timeout=120
                 )
                 output = stdout.read()
@@ -152,7 +200,20 @@ class CameraDownloader:
     def list_log_files(self, directory='/var/log'):
         """List available log files on camera"""
         try:
-            output = self._exec_command(f'ls -la {directory}')
+            # Validate directory is in allowed list (security)
+            if not _is_allowed_directory(directory):
+                logger.warning(f"Attempted access to non-allowed directory: {directory}")
+                return None, f"Directory not allowed. Permitted directories: {', '.join(ALLOWED_LOG_DIRECTORIES)}"
+
+            # Sanitize directory path
+            try:
+                directory = _sanitize_path(directory)
+            except ValueError as e:
+                return None, f"Invalid directory: {str(e)}"
+
+            # Use shell quoting for safety
+            safe_directory = shlex.quote(directory)
+            output = self._exec_command(f'ls -la {safe_directory}')
             if not output:
                 return None, f"Failed to list files in {directory}"
 

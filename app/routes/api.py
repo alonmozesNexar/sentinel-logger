@@ -38,10 +38,10 @@ def get_log_entries(file_id):
     """Get log entries with filtering and pagination"""
     log_file = LogFile.query.get_or_404(file_id)
 
-    # Pagination
-    page = request.args.get('page', 1, type=int)
+    # Pagination with proper validation
+    page = max(1, request.args.get('page', 1, type=int))
     per_page = request.args.get('per_page', 100, type=int)
-    per_page = min(per_page, 500)  # Max 500 per page
+    per_page = max(1, min(per_page, 500))  # Enforce range: 1-500
 
     # Filters
     severity = request.args.get('severity')
@@ -361,7 +361,7 @@ def search_logs():
     service = request.args.get('service')
     file_id = request.args.get('file_id', type=int)
     limit = request.args.get('limit', 100, type=int)
-    limit = min(limit, 500)
+    limit = max(1, min(limit, 500))  # Enforce range: 1-500
     smart_search = request.args.get('smart', 'true').lower() == 'true'
 
     if not query_text:
@@ -538,6 +538,7 @@ def get_error_sequences(file_id):
 
     detector = IssueDetector()
     window = request.args.get('window', 5, type=int)
+    window = max(1, min(window, 60))  # Enforce range: 1-60 minutes
     sequences = detector.detect_error_sequences(entries_data, window_minutes=window)
 
     # Convert datetime objects to strings for JSON serialization
@@ -872,39 +873,44 @@ def deep_analysis(file_id):
 
     result['relevant_logs'] = logs_with_context[:200]  # Limit to 200 entries with context
 
-    # Cache the successful result
+    # Cache the successful result with proper transaction handling
     if result.get('success'):
         try:
-            # Check if cache entry already exists (in case of race condition)
-            existing = db.session.query(AIAnalysisCache).filter_by(
+            from sqlalchemy.exc import IntegrityError
+
+            # Use a transaction with proper isolation to handle race conditions
+            cache_entry = AIAnalysisCache(
                 log_file_id=file_id,
-                query_hash=query_hash
-            ).first()
+                query=query[:500],  # Truncate if needed
+                query_hash=query_hash,
+                analysis_result=result.get('analysis', ''),
+                relevant_logs=json.dumps(logs_with_context[:200]),
+                providers_used=','.join(result.get('providers_used', [])),
+                provider_count=result.get('provider_count', 1),
+                logs_analyzed=result.get('logs_analyzed', len(relevant_entries))
+            )
 
-            if existing:
-                # Update existing cache
-                existing.analysis_result = result.get('analysis', '')
-                existing.relevant_logs = json.dumps(logs_with_context[:200])
-                existing.providers_used = ','.join(result.get('providers_used', []))
-                existing.provider_count = result.get('provider_count', 1)
-                existing.logs_analyzed = result.get('logs_analyzed', len(relevant_entries))
-                existing.created_at = datetime.utcnow()
-            else:
-                # Create new cache entry
-                cache_entry = AIAnalysisCache(
-                    log_file_id=file_id,
-                    query=query[:500],  # Truncate if needed
-                    query_hash=query_hash,
-                    analysis_result=result.get('analysis', ''),
-                    relevant_logs=json.dumps(logs_with_context[:200]),
-                    providers_used=','.join(result.get('providers_used', [])),
-                    provider_count=result.get('provider_count', 1),
-                    logs_analyzed=result.get('logs_analyzed', len(relevant_entries))
-                )
+            try:
                 db.session.add(cache_entry)
-
-            db.session.commit()
-            result['cached'] = True
+                db.session.commit()
+                result['cached'] = True
+            except IntegrityError:
+                # Race condition: another request created the cache entry
+                db.session.rollback()
+                # Update the existing entry instead
+                existing = db.session.query(AIAnalysisCache).filter_by(
+                    log_file_id=file_id,
+                    query_hash=query_hash
+                ).first()
+                if existing:
+                    existing.analysis_result = result.get('analysis', '')
+                    existing.relevant_logs = json.dumps(logs_with_context[:200])
+                    existing.providers_used = ','.join(result.get('providers_used', []))
+                    existing.provider_count = result.get('provider_count', 1)
+                    existing.logs_analyzed = result.get('logs_analyzed', len(relevant_entries))
+                    existing.created_at = datetime.utcnow()
+                    db.session.commit()
+                result['cached'] = True
         except Exception as e:
             # Don't fail the request if caching fails
             db.session.rollback()
@@ -1016,74 +1022,81 @@ def reparse_log_file(file_id):
     if not file_path.exists():
         return jsonify({'error': 'Log file not found on disk'}), 404
 
-    # Delete existing entries and issues
-    LogEntry.query.filter_by(log_file_id=file_id).delete()
-    Issue.query.filter_by(log_file_id=file_id).delete()
-    db.session.commit()
+    # Use a single transaction for the entire reparse operation
+    # This ensures atomicity - either everything succeeds or nothing changes
+    try:
+        # Re-parse the file first (before deleting anything)
+        parser = LogParser()
+        entries, stats = parser.parse_file_full(file_path)
 
-    # Re-parse the file
-    parser = LogParser()
-    entries, stats = parser.parse_file_full(file_path)
+        # Now delete existing entries and issues within the transaction
+        LogEntry.query.filter_by(log_file_id=file_id).delete()
+        Issue.query.filter_by(log_file_id=file_id).delete()
 
-    # Save new entries
-    for entry_data in entries:
-        entry = LogEntry(
-            log_file_id=file_id,
-            line_number=entry_data.get('line_number'),
-            timestamp=entry_data.get('timestamp'),
-            severity=entry_data.get('severity'),
-            service=entry_data.get('service'),
-            component=entry_data.get('component'),
-            command=entry_data.get('command'),
-            message=entry_data.get('message'),
-            raw_content=entry_data.get('raw_content')
-        )
-        db.session.add(entry)
+        # Save new entries
+        for entry_data in entries:
+            entry = LogEntry(
+                log_file_id=file_id,
+                line_number=entry_data.get('line_number'),
+                timestamp=entry_data.get('timestamp'),
+                severity=entry_data.get('severity'),
+                service=entry_data.get('service'),
+                component=entry_data.get('component'),
+                command=entry_data.get('command'),
+                message=entry_data.get('message'),
+                raw_content=entry_data.get('raw_content')
+            )
+            db.session.add(entry)
 
-    # Update log file stats from parser stats
-    error_count = stats.get('error_count', 0) + stats.get('critical_count', 0)
-    warning_count = stats.get('warning_count', 0)
-    log_file.total_lines = stats.get('total_lines', len(entries))
-    log_file.error_count = error_count
-    log_file.warning_count = warning_count
+        # Update log file stats from parser stats
+        error_count = stats.get('error_count', 0) + stats.get('critical_count', 0)
+        warning_count = stats.get('warning_count', 0)
+        log_file.total_lines = stats.get('total_lines', len(entries))
+        log_file.error_count = error_count
+        log_file.warning_count = warning_count
 
-    db.session.commit()
+        # Flush to get the entries in the session
+        db.session.flush()
 
-    # Re-detect issues
-    from datetime import datetime
-    detector = IssueDetector()
-    entries_data = [e.to_dict() for e in LogEntry.query.filter_by(log_file_id=file_id).all()]
-    detected_issues = detector.detect_issues(entries_data)
+        # Re-detect issues
+        detector = IssueDetector()
+        entries_data = [e.to_dict() for e in LogEntry.query.filter_by(log_file_id=file_id).all()]
+        detected_issues = detector.detect_issues(entries_data)
 
-    for issue_data in detected_issues:
-        # Convert timestamp strings to datetime objects if needed
-        first_occ = issue_data.get('first_occurrence')
-        last_occ = issue_data.get('last_occurrence')
-        if isinstance(first_occ, str):
-            try:
-                first_occ = datetime.fromisoformat(first_occ)
-            except ValueError:
-                first_occ = None
-        if isinstance(last_occ, str):
-            try:
-                last_occ = datetime.fromisoformat(last_occ)
-            except ValueError:
-                last_occ = None
+        for issue_data in detected_issues:
+            # Convert timestamp strings to datetime objects if needed
+            first_occ = issue_data.get('first_occurrence')
+            last_occ = issue_data.get('last_occurrence')
+            if isinstance(first_occ, str):
+                try:
+                    first_occ = datetime.fromisoformat(first_occ)
+                except ValueError:
+                    first_occ = None
+            if isinstance(last_occ, str):
+                try:
+                    last_occ = datetime.fromisoformat(last_occ)
+                except ValueError:
+                    last_occ = None
 
-        issue = Issue(
-            log_file_id=file_id,
-            title=issue_data.get('title'),
-            description=issue_data.get('description'),
-            severity=issue_data.get('severity'),
-            category=issue_data.get('category'),
-            affected_lines=json.dumps(issue_data.get('affected_lines', [])),
-            first_occurrence=first_occ,
-            last_occurrence=last_occ,
-            occurrence_count=issue_data.get('occurrence_count', 1)
-        )
-        db.session.add(issue)
+            issue = Issue(
+                log_file_id=file_id,
+                title=issue_data.get('title'),
+                description=issue_data.get('description'),
+                severity=issue_data.get('severity'),
+                category=issue_data.get('category'),
+                affected_lines=json.dumps(issue_data.get('affected_lines', [])),
+                first_occurrence=first_occ,
+                last_occurrence=last_occ,
+                occurrence_count=issue_data.get('occurrence_count', 1)
+            )
+            db.session.add(issue)
 
-    db.session.commit()
+        # Commit the entire transaction
+        db.session.commit()
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Reparse failed: {str(e)}'}), 500
 
     return jsonify({
         'success': True,
