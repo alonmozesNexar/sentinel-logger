@@ -31,37 +31,43 @@
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('main.index') }}">
-                            <i class="bi bi-speedometer2 me-1"></i>Dashboard
+                            <i class="bi bi-journal-text me-1"></i>Logs
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-cloud-download me-1"></i>Download
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('main.upload') }}">
+                                <i class="bi bi-upload me-2"></i>Upload File
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('main.upload') }}#paste">
+                                <i class="bi bi-clipboard me-2"></i>Paste Text
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('main.s3_download') }}">
+                                <i class="bi bi-cloud me-2"></i>From S3 Bucket
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('main.camera_download') }}">
+                                <i class="bi bi-camera-video me-2"></i>From Camera (SSH)
+                            </a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('main.dashboard') }}">
+                            <i class="bi bi-grid-3x3-gap me-1"></i>Dashboard
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.upload') }}">
-                            <i class="bi bi-upload me-1"></i>Upload
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.issues_list') }}">
-                            <i class="bi bi-exclamation-triangle me-1"></i>Issues
+                        <a class="nav-link" href="{{ url_for('main.live_stream') }}">
+                            <i class="bi bi-broadcast me-1"></i>Live
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('main.compare') }}">
                             <i class="bi bi-arrow-left-right me-1"></i>Compare
                         </a>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-bug me-1"></i>Bug Reports
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('main.bug_reports_list') }}">
-                                <i class="bi bi-list-ul me-2"></i>All Reports
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('main.create_jira_bug') }}">
-                                <i class="bi bi-box-arrow-up-right me-2"></i>Create Jira Bug
-                            </a></li>
-                        </ul>
                     </li>
                 </ul>
                 <!-- System Stats Widgets (compact navbar version) -->
@@ -115,7 +121,7 @@
     <!-- Footer -->
     <footer class="footer mt-auto py-3 bg-light">
         <div class="container-fluid text-center">
-            <span class="text-muted">Sentinel Logger - Helping QA testers find issues faster</span>
+            <span class="text-muted">Sentinel Logger - Log debugging tool for Nexar</span>
         </div>
     </footer>
 
@@ -298,21 +304,22 @@
     // ============================================
     const commandPaletteCommands = [
         // Navigation
-        { type: 'nav', icon: 'bi-speedometer2', title: 'Go to Dashboard', desc: 'View all log files', action: () => window.location.href = '{{ url_for("main.index") }}', shortcut: '' },
-        { type: 'nav', icon: 'bi-upload', title: 'Upload Log File', desc: 'Upload new log files for analysis', action: () => window.location.href = '{{ url_for("main.upload") }}', shortcut: '' },
-        { type: 'nav', icon: 'bi-exclamation-triangle', title: 'View Issues', desc: 'See all detected issues', action: () => window.location.href = '{{ url_for("main.issues_list") }}', shortcut: '' },
-        { type: 'nav', icon: 'bi-bug', title: 'Bug Reports', desc: 'View and manage bug reports', action: () => window.location.href = '{{ url_for("main.bug_reports_list") }}', shortcut: '' },
+        { type: 'nav', icon: 'bi-journal-text', title: 'View Logs', desc: 'Browse all log files', action: () => window.location.href = '{{ url_for("main.index") }}', shortcut: '' },
+        { type: 'nav', icon: 'bi-grid-3x3-gap', title: 'Dashboard', desc: 'Multi-camera dashboard with error rates', action: () => window.location.href = '{{ url_for("main.dashboard") }}', shortcut: '' },
+        { type: 'nav', icon: 'bi-broadcast', title: 'Live Stream', desc: 'Watch logs in real-time from camera', action: () => window.location.href = '{{ url_for("main.live_stream") }}', shortcut: '' },
+        { type: 'nav', icon: 'bi-upload', title: 'Upload Log File', desc: 'Upload a log file from your computer', action: () => window.location.href = '{{ url_for("main.upload") }}', shortcut: '' },
+        { type: 'nav', icon: 'bi-cloud', title: 'Download from S3', desc: 'Browse and download logs from S3 bucket', action: () => window.location.href = '{{ url_for("main.s3_download") }}', shortcut: '' },
+        { type: 'nav', icon: 'bi-camera-video', title: 'Download from Camera', desc: 'Connect to camera via SSH and download logs', action: () => window.location.href = '{{ url_for("main.camera_download") }}', shortcut: '' },
         { type: 'nav', icon: 'bi-arrow-left-right', title: 'Compare Logs', desc: 'Compare two log files side by side', action: () => window.location.href = '{{ url_for("main.compare") }}', shortcut: '' },
-        { type: 'nav', icon: 'bi-box-arrow-up-right', title: 'Create Jira Bug', desc: 'Create a new Jira bug report', action: () => window.location.href = '{{ url_for("main.create_jira_bug") }}', shortcut: '' },
 
         // Actions
         { type: 'action', icon: 'bi-search', title: 'Search Logs', desc: 'Search across all log files', action: () => document.querySelector('input[name="q"]')?.focus(), shortcut: 'Ctrl+/' },
         { type: 'theme', icon: 'bi-moon', title: 'Toggle Dark Mode', desc: 'Switch between light and dark theme', action: () => toggleTheme(), shortcut: '' },
 
-        // File actions (if on a file page)
-        { type: 'file', icon: 'bi-download', title: 'Export as CSV', desc: 'Download current log as CSV', action: () => { if (window.analysisData) window.location.href = `/api/log-files/${window.analysisData.fileId}/export/csv`; }, shortcut: '' },
-        { type: 'file', icon: 'bi-filetype-json', title: 'Export as JSON', desc: 'Download current log as JSON', action: () => { if (window.analysisData) window.location.href = `/api/log-files/${window.analysisData.fileId}/export/json`; }, shortcut: '' },
-        { type: 'file', icon: 'bi-file-pdf', title: 'Export as PDF', desc: 'Download current log as PDF', action: () => { if (window.analysisData) window.location.href = `/api/log-files/${window.analysisData.fileId}/export/pdf`; }, shortcut: '' },
+        // File actions (if on a log viewer page)
+        { type: 'file', icon: 'bi-clipboard', title: 'Copy All Visible', desc: 'Copy all filtered log entries', action: () => { if (window.copyFilteredLogs) window.copyFilteredLogs(); }, shortcut: 'Shift+C' },
+        { type: 'file', icon: 'bi-download', title: 'Export as Text', desc: 'Download filtered logs as .txt file', action: () => { if (window.exportLogs) window.exportLogs('txt'); }, shortcut: '' },
+        { type: 'file', icon: 'bi-filetype-json', title: 'Export as JSON', desc: 'Download filtered logs as JSON', action: () => { if (window.exportLogs) window.exportLogs('json'); }, shortcut: '' },
     ];
 
     let commandPaletteSelectedIndex = 0;

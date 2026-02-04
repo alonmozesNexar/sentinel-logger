@@ -60,7 +60,7 @@
 <div class="row">
     <div class="col-12">
         {% for file in log_files[:10] %}
-        <a href="{{ url_for('main.analyze', file_id=file.id) }}" class="file-card">
+        <a href="{{ url_for('main.view_log', file_id=file.id) }}" class="file-card">
             <div class="file-icon">
                 <i class="bi bi-file-text"></i>
             </div>

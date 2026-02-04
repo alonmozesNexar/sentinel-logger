@@ -610,7 +610,7 @@
 
                     <div class="alert alert-info">
                         <i class="bi bi-info-circle me-2"></i>
-                        <strong>Tip:</strong> Go to the <a href="{{ url_for('main.analyze', file_id=log_file.id) if log_file else '#' }}">Analysis page</a> to see detailed issue information and log context that you can copy.
+                        <strong>Tip:</strong> Go to the <a href="{{ url_for('main.view_log', file_id=log_file.id) if log_file else '#' }}">Log Viewer</a> to see detailed log context that you can copy.
                     </div>
 
                     <div class="d-flex gap-2">

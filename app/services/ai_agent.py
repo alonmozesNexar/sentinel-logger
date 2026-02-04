@@ -140,16 +140,16 @@ List the bugs that should be filed, with suggested titles.
                 'priority': 1  # Highest priority
             }
 
-        # Groq - DISABLED (using Gemini only)
-        # groq_key = os.environ.get('GROQ_API_KEY')
-        # if groq_key:
-        #     self.providers['groq'] = {
-        #         'name': 'Groq',
-        #         'type': 'groq',
-        #         'api_key': groq_key,
-        #         'available': True,
-        #         'priority': 4
-        #     }
+        # Groq (FREE and fast!) - PRIMARY PROVIDER
+        groq_key = os.environ.get('GROQ_API_KEY')
+        if groq_key:
+            self.providers['groq'] = {
+                'name': 'Groq (Llama 3.3 70B)',
+                'type': 'groq',
+                'api_key': groq_key,
+                'available': True,
+                'priority': 1  # Highest priority
+            }
 
         # Ollama - DISABLED (using Gemini only)
         # if self._check_ollama():
@@ -545,16 +545,23 @@ List the bugs that should be filed, with suggested titles.
 
     def get_status(self) -> dict:
         """Get AI agent status."""
-        # Refresh Ollama status
-        if 'ollama' in self.providers:
-            self.providers['ollama']['available'] = self._check_ollama()
-        elif self._check_ollama():
-            self.providers['ollama'] = {
-                'name': 'Ollama (llama3.1:8b)',
-                'type': 'ollama',
-                'available': True,
-                'priority': 5
-            }
+        # Only use Ollama as fallback if no cloud providers are configured
+        has_cloud_provider = any(
+            p['type'] in ('anthropic', 'openai', 'gemini')
+            for p in self.providers.values()
+        )
+
+        if not has_cloud_provider:
+            # Refresh Ollama status only if no cloud providers
+            if 'ollama' in self.providers:
+                self.providers['ollama']['available'] = self._check_ollama()
+            elif self._check_ollama():
+                self.providers['ollama'] = {
+                    'name': 'Ollama (llama3.1:8b)',
+                    'type': 'ollama',
+                    'available': True,
+                    'priority': 5
+                }
 
         # Sort providers by priority
         sorted_providers = sorted(

@@ -13,8 +13,7 @@ from app.models import LogFile, LogEntry, Issue, BugReport
 from app.routes import main_bp
 from app.services import (
     LogParser, IssueDetector, BugReportGenerator,
-    CameraDownloader, SectionAnalyzer, SmartAnalyzer,
-    get_s3_downloader
+    CameraDownloader, get_s3_downloader
 )
 
 
@@ -87,7 +86,7 @@ def upload():
             db.session.commit()
 
             flash(f'File "{filename}" uploaded successfully!', 'success')
-            return redirect(url_for('main.analyze', file_id=log_file.id))
+            return redirect(url_for('main.view_log', file_id=log_file.id))
         else:
             flash('File type not allowed. Please upload .log or .txt files.', 'error')
             return redirect(request.url)
@@ -137,7 +136,7 @@ def paste_log():
     db.session.commit()
 
     flash(f'Log "{filename}" created successfully!', 'success')
-    return redirect(url_for('main.analyze', file_id=log_file.id))
+    return redirect(url_for('main.view_log', file_id=log_file.id))
 
 
 @main_bp.route('/camera-download', methods=['GET', 'POST'])
@@ -206,7 +205,7 @@ def camera_download():
         db.session.commit()
 
         flash(f'Log downloaded from camera successfully! ({file_size / 1024:.1f} KB)', 'success')
-        return redirect(url_for('main.analyze', file_id=log_file.id))
+        return redirect(url_for('main.view_log', file_id=log_file.id))
 
     return render_template('camera_download.html',
                            default_ip=default_ip,
@@ -376,7 +375,7 @@ def s3_download():
             db.session.commit()
 
             flash(f'Log downloaded from S3 successfully! ({file_size / 1024:.1f} KB)', 'success')
-            return redirect(url_for('main.analyze', file_id=log_file.id))
+            return redirect(url_for('main.view_log', file_id=log_file.id))
 
         except Exception as e:
             flash(f'S3 download failed: {str(e)}', 'error')
@@ -437,13 +436,10 @@ def s3_download_stream():
             original_filename=f"S3: {serial_number}/{original_name}",
             file_size=file_size,
             upload_date=datetime.utcnow(),
-            source='s3'
+            device_info=json.dumps({'source': 's3', 'serial_number': serial_number})
         )
         db.session.add(log_file)
         db.session.commit()
-
-        # Parse and detect issues
-        parse_log_file(log_file)
 
         # Stream the content back
         def generate():
@@ -584,21 +580,15 @@ def s3_refresh():
     return jsonify(s3.get_status())
 
 
-@main_bp.route('/analyze/<int:file_id>')
-def analyze(file_id):
-    """Analyze a log file and show results"""
+@main_bp.route('/log/<int:file_id>')
+def view_log(file_id):
+    """View log entries with filtering and search modes"""
     log_file = LogFile.query.get_or_404(file_id)
     file_path = current_app.config['UPLOAD_FOLDER'] / log_file.filename
 
-    if not file_path.exists():
-        flash('Log file not found on disk', 'error')
-        return redirect(url_for('main.index'))
-
     # Parse file if not already parsed
-    if not log_file.parsed:
+    if not log_file.parsed and file_path.exists():
         parser = LogParser()
-        detector = IssueDetector()
-
         entries, stats = parser.parse_file_full(file_path)
 
         # Get device info
@@ -620,36 +610,6 @@ def analyze(file_id):
             )
             db.session.add(entry)
 
-        # Detect issues with enhanced information
-        issues = detector.detect_issues(entries)
-        for issue_data in issues:
-            issue = Issue(
-                log_file_id=log_file.id,
-                title=issue_data['title'],
-                description=issue_data['description'],
-                severity=issue_data['severity'],
-                category=issue_data['category'],
-                first_occurrence=issue_data['first_occurrence'],
-                last_occurrence=issue_data['last_occurrence'],
-                occurrence_count=issue_data['occurrence_count'],
-                affected_lines=json.dumps(issue_data['affected_lines']),
-                context=issue_data['context'],
-                confidence_score=issue_data['confidence_score'],
-                status=issue_data['status']
-            )
-            # Store enhanced fields in the context as JSON for retrieval
-            enhanced_data = {
-                'explanation': issue_data.get('explanation', ''),
-                'why_it_matters': issue_data.get('why_it_matters', ''),
-                'suggested_actions': issue_data.get('suggested_actions', []),
-                'technical_details': issue_data.get('technical_details', '')
-            }
-            issue.context = json.dumps({
-                'log_context': issue_data['context'],
-                'enhanced': enhanced_data
-            })
-            db.session.add(issue)
-
         # Update log file stats
         log_file.total_lines = stats['total_lines']
         log_file.error_count = stats['error_count'] + stats.get('critical_count', 0)
@@ -659,130 +619,18 @@ def analyze(file_id):
 
         db.session.commit()
 
-    # Get data for display
-    entries = LogEntry.query.filter_by(log_file_id=file_id).order_by(LogEntry.line_number).limit(1000).all()
-    issues_db = Issue.query.filter_by(log_file_id=file_id).order_by(Issue.severity).all()
-
-    # Get unique services, components, and severities for filters
-    services = db.session.query(LogEntry.service).filter_by(log_file_id=file_id).distinct().all()
-    services = [s[0] for s in services if s[0]]
-
-    components = db.session.query(LogEntry.component).filter_by(log_file_id=file_id).distinct().all()
-    components = [c[0] for c in components if c[0]]
-
-    # Convert issues to include enhanced data
-    issues = []
-    for issue in issues_db:
-        issue_dict = issue.to_dict()
-        # Try to extract enhanced data from context
-        try:
-            context_data = json.loads(issue.context) if issue.context else {}
-            if isinstance(context_data, dict) and 'enhanced' in context_data:
-                issue_dict['explanation'] = context_data['enhanced'].get('explanation', '')
-                issue_dict['why_it_matters'] = context_data['enhanced'].get('why_it_matters', '')
-                issue_dict['suggested_actions'] = context_data['enhanced'].get('suggested_actions', [])
-                issue_dict['technical_details'] = context_data['enhanced'].get('technical_details', '')
-                issue_dict['context'] = context_data.get('log_context', issue.context)
-            else:
-                # Legacy format - just plain context string
-                issue_dict['explanation'] = ''
-                issue_dict['why_it_matters'] = ''
-                issue_dict['suggested_actions'] = []
-                issue_dict['technical_details'] = ''
-        except (json.JSONDecodeError, TypeError):
-            issue_dict['explanation'] = ''
-            issue_dict['why_it_matters'] = ''
-            issue_dict['suggested_actions'] = []
-            issue_dict['technical_details'] = ''
-
-        # Get components and services from affected log entries
-        affected_lines = json.loads(issue.affected_lines) if issue.affected_lines else []
-        if affected_lines:
-            # Limit to first 30 affected lines to avoid huge displays
-            # Show the actual issue lines with 1 line of context each
-            displayed_lines = affected_lines[:30]
-
-            # Build set of lines to fetch (affected + 1 context line before/after each)
-            lines_to_fetch = set()
-            for line_num in displayed_lines:
-                lines_to_fetch.add(max(1, line_num - 1))
-                lines_to_fetch.add(line_num)
-                lines_to_fetch.add(line_num + 1)
-
-            # Fetch only the specific lines we need
-            context_entries = LogEntry.query.filter(
-                LogEntry.log_file_id == file_id,
-                LogEntry.line_number.in_(lines_to_fetch)
-            ).order_by(LogEntry.line_number).all()
-
-            # Convert to list of dicts with marked flag
-            issue_dict['log_entries'] = []
-            for entry in context_entries:
-                entry_dict = {
-                    'line_number': entry.line_number,
-                    'timestamp': entry.timestamp.isoformat() if entry.timestamp else None,
-                    'severity': entry.severity,
-                    'service': entry.service,
-                    'component': entry.component,
-                    'message': entry.message,
-                    'raw_content': entry.raw_content,
-                    'is_issue_line': entry.line_number in affected_lines
-                }
-                issue_dict['log_entries'].append(entry_dict)
-
-            # Add indicator if there are more affected lines not shown
-            issue_dict['more_lines_count'] = max(0, len(affected_lines) - 30)
-
-            components = list(set(e.component for e in context_entries if e.component))
-            services = list(set(e.service for e in context_entries if e.service))
-            issue_dict['components'] = sorted(components)
-            issue_dict['services'] = sorted(services)
-        else:
-            issue_dict['components'] = []
-            issue_dict['services'] = []
-            issue_dict['log_entries'] = []
-            issue_dict['more_lines_count'] = 0
-
-        issues.append(issue_dict)
-
-    # Calculate health score
-    detector = IssueDetector()
-    entries_data = [e.to_dict() for e in entries]
-    health_score = detector.get_health_score(entries_data, issues)
-
-    # Analyze log sections for Sections tab
-    section_analyzer = SectionAnalyzer()
-    all_entries = LogEntry.query.filter_by(log_file_id=file_id).order_by(LogEntry.line_number).all()
-    all_entries_data = [e.to_dict() for e in all_entries]
-    log_sections = section_analyzer.get_section_summary(all_entries_data)
-
-    # Smart AI-like analysis for detailed issue insights
-    smart_analyzer = SmartAnalyzer()
-    smart_analysis = smart_analyzer.analyze(all_entries_data)
-
-    return render_template('analyze.html',
-                           log_file=log_file,
-                           entries=entries,
-                           issues=issues,
-                           services=services,
-                           components=components,
-                           health_score=health_score,
-                           log_sections=log_sections,
-                           smart_analysis=smart_analysis)
-
-
-@main_bp.route('/log/<int:file_id>')
-def view_log(file_id):
-    """View log entries with filtering"""
-    log_file = LogFile.query.get_or_404(file_id)
-
     # Get filter parameters
     severity = request.args.get('severity')
     service = request.args.get('service')
     component = request.args.get('component')
     search = request.args.get('search', '')
+    search_mode = request.args.get('search_mode', 'contains')  # contains, regex, exact
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 100, type=int)
+
+    # Allow unlimited (99999 means all)
+    if per_page >= 99999:
+        per_page = 100000  # Effectively unlimited
 
     # Build query
     query = LogEntry.query.filter_by(log_file_id=file_id)
@@ -793,8 +641,22 @@ def view_log(file_id):
         query = query.filter_by(service=service)
     if component:
         query = query.filter_by(component=component)
+
+    # Apply search based on mode
     if search:
-        query = query.filter(LogEntry.raw_content.ilike(f'%{search}%'))
+        if search_mode == 'exact':
+            # Case-sensitive exact match
+            query = query.filter(LogEntry.raw_content.contains(search))
+        elif search_mode == 'regex':
+            # Regex search - use SQLite's REGEXP if available, otherwise fallback
+            try:
+                query = query.filter(LogEntry.raw_content.op('REGEXP')(search))
+            except Exception:
+                # Fallback to case-insensitive contains if REGEXP not supported
+                query = query.filter(LogEntry.raw_content.ilike(f'%{search}%'))
+        else:
+            # Default: case-insensitive contains
+            query = query.filter(LogEntry.raw_content.ilike(f'%{search}%'))
 
     # Paginate
     entries = query.order_by(LogEntry.line_number).paginate(
@@ -819,7 +681,8 @@ def view_log(file_id):
                            current_severity=severity,
                            current_service=service,
                            current_component=component,
-                           search=search)
+                           search=search,
+                           search_mode=search_mode)
 
 
 @main_bp.route('/compare')
@@ -827,6 +690,167 @@ def compare():
     """Compare two log files"""
     log_files = LogFile.query.order_by(LogFile.upload_date.desc()).all()
     return render_template('compare.html', log_files=log_files)
+
+
+@main_bp.route('/live')
+def live_stream():
+    """Live log streaming page"""
+    log_files = LogFile.query.order_by(LogFile.upload_date.desc()).all()
+    return render_template('live_stream.html', log_files=log_files)
+
+
+@main_bp.route('/dashboard')
+def dashboard():
+    """Multi-camera dashboard with error rates"""
+    from datetime import timedelta
+    from collections import defaultdict
+
+    # Get time range filter
+    time_range = request.args.get('range', '24h')
+    now = datetime.now()
+
+    if time_range == '1h':
+        cutoff = now - timedelta(hours=1)
+    elif time_range == '6h':
+        cutoff = now - timedelta(hours=6)
+    elif time_range == '7d':
+        cutoff = now - timedelta(days=7)
+    elif time_range == 'all':
+        cutoff = None
+    else:  # 24h default
+        cutoff = now - timedelta(hours=24)
+
+    # Get all log files
+    query = LogFile.query
+    if cutoff:
+        query = query.filter(LogFile.upload_date >= cutoff)
+    log_files = query.order_by(LogFile.upload_date.desc()).all()
+
+    # Group logs by camera/device
+    cameras_dict = defaultdict(lambda: {
+        'name': 'Unknown',
+        'logs': [],
+        'error_count': 0,
+        'warning_count': 0,
+        'log_count': 0
+    })
+
+    for log_file in log_files:
+        # Extract camera/device identifier from filename or device_info
+        device_name = 'Unknown'
+        device_info = json.loads(log_file.device_info) if log_file.device_info else {}
+
+        if device_info.get('source') == 'camera':
+            device_name = f"Camera ({device_info.get('camera_ip', 'Unknown')})"
+        elif device_info.get('source') == 's3':
+            device_name = f"S3 ({device_info.get('serial_number', 'Unknown')})"
+        elif 'camera' in log_file.original_filename.lower():
+            # Try to extract from filename
+            device_name = log_file.original_filename.split('_')[0] if '_' in log_file.original_filename else 'Camera'
+        else:
+            device_name = 'Local Upload'
+
+        cameras_dict[device_name]['name'] = device_name
+        cameras_dict[device_name]['logs'].append(log_file)
+        cameras_dict[device_name]['error_count'] += log_file.error_count
+        cameras_dict[device_name]['warning_count'] += log_file.warning_count
+        cameras_dict[device_name]['log_count'] += 1
+
+    # Convert to list with additional computed fields
+    cameras = []
+    for idx, (name, data) in enumerate(cameras_dict.items()):
+        # Determine status based on error rate
+        if data['error_count'] > 10:
+            status = 'critical'
+        elif data['error_count'] > 0 or data['warning_count'] > 10:
+            status = 'warning'
+        else:
+            status = 'healthy'
+
+        cameras.append({
+            'id': idx + 1,
+            'name': name,
+            'log_count': data['log_count'],
+            'error_count': data['error_count'],
+            'warning_count': data['warning_count'],
+            'status': status,
+            'recent_logs': sorted(data['logs'], key=lambda x: x.upload_date or datetime.min, reverse=True)[:5]
+        })
+
+    # Sort cameras by error count (most errors first)
+    cameras.sort(key=lambda x: x['error_count'], reverse=True)
+
+    # Calculate totals
+    total_logs = len(log_files)
+    total_errors = sum(f.error_count for f in log_files)
+    total_warnings = sum(f.warning_count for f in log_files)
+    healthy_cameras = len([c for c in cameras if c['status'] == 'healthy'])
+
+    # Build error rate chart data (errors over time)
+    # Group by hour
+    error_rate_data = {'labels': [], 'errors': [], 'warnings': []}
+    time_buckets = defaultdict(lambda: {'errors': 0, 'warnings': 0})
+
+    for log_file in log_files:
+        if log_file.upload_date:
+            bucket = log_file.upload_date.strftime('%m/%d %H:00')
+            time_buckets[bucket]['errors'] += log_file.error_count
+            time_buckets[bucket]['warnings'] += log_file.warning_count
+
+    # Sort by time and take last 24 buckets
+    sorted_buckets = sorted(time_buckets.items())[-24:]
+    for bucket, data in sorted_buckets:
+        error_rate_data['labels'].append(bucket)
+        error_rate_data['errors'].append(data['errors'])
+        error_rate_data['warnings'].append(data['warnings'])
+
+    # Mini chart data for each camera
+    camera_chart_data = {}
+    for camera in cameras:
+        chart_data = {'labels': [], 'errors': []}
+        for log in camera['recent_logs'][:10]:
+            if log.upload_date:
+                chart_data['labels'].append(log.upload_date.strftime('%H:%M'))
+                chart_data['errors'].append(log.error_count)
+        # Reverse to show chronological order
+        chart_data['labels'].reverse()
+        chart_data['errors'].reverse()
+        camera_chart_data[camera['id']] = chart_data
+
+    # Get recent errors from log entries
+    recent_errors = []
+    if cutoff:
+        error_entries = LogEntry.query.filter(
+            LogEntry.severity.in_(['ERROR', 'CRITICAL'])
+        ).order_by(LogEntry.timestamp.desc()).limit(50).all()
+    else:
+        error_entries = LogEntry.query.filter(
+            LogEntry.severity.in_(['ERROR', 'CRITICAL'])
+        ).order_by(LogEntry.id.desc()).limit(50).all()
+
+    for entry in error_entries:
+        log_file = LogFile.query.get(entry.log_file_id)
+        device_info = json.loads(log_file.device_info) if log_file and log_file.device_info else {}
+        device_name = device_info.get('serial_number') or device_info.get('camera_ip') or 'Unknown'
+
+        recent_errors.append({
+            'timestamp': entry.timestamp,
+            'device': device_name,
+            'message': entry.message or entry.raw_content[:100],
+            'log_file_id': entry.log_file_id,
+            'line_number': entry.line_number
+        })
+
+    return render_template('dashboard.html',
+                           cameras=cameras,
+                           total_logs=total_logs,
+                           total_errors=total_errors,
+                           total_warnings=total_warnings,
+                           healthy_cameras=healthy_cameras,
+                           error_rate_data=error_rate_data,
+                           camera_chart_data=camera_chart_data,
+                           recent_errors=recent_errors,
+                           current_range=time_range)
 
 
 @main_bp.route('/issues')

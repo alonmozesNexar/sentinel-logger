@@ -88,6 +88,50 @@ def get_log_issues(file_id):
     return jsonify([i.to_dict() for i in issues])
 
 
+@api_bp.route('/log-files/<int:file_id>/search', methods=['GET'])
+def search_log_entries(file_id):
+    """Search all log entries and return matching line numbers for minimap"""
+    import re
+
+    log_file = LogFile.query.get_or_404(file_id)
+
+    query_str = request.args.get('q', '').strip()
+    mode = request.args.get('mode', 'contains')
+
+    if not query_str:
+        return jsonify({'matches': [], 'total': 0})
+
+    # Build query based on mode
+    query = LogEntry.query.filter_by(log_file_id=file_id)
+
+    if mode == 'exact':
+        query = query.filter(LogEntry.raw_content.contains(query_str))
+    elif mode == 'regex':
+        # For regex, we need to fetch and filter in Python (SQLite doesn't support regex well)
+        try:
+            pattern = re.compile(query_str, re.IGNORECASE)
+            all_entries = LogEntry.query.filter_by(log_file_id=file_id).all()
+            matches = [e.line_number for e in all_entries if pattern.search(e.raw_content or '')]
+            return jsonify({
+                'matches': matches[:1000],  # Limit to 1000 for performance
+                'total': len(matches)
+            })
+        except re.error:
+            return jsonify({'matches': [], 'total': 0, 'error': 'Invalid regex'})
+    else:
+        # Case-insensitive contains (default)
+        query = query.filter(LogEntry.raw_content.ilike(f'%{query_str}%'))
+
+    # Get only line numbers for efficiency
+    results = query.with_entities(LogEntry.line_number).order_by(LogEntry.line_number).limit(1000).all()
+    matches = [r[0] for r in results]
+
+    return jsonify({
+        'matches': matches,
+        'total': len(matches)
+    })
+
+
 @api_bp.route('/log-files/<int:file_id>/charts', methods=['GET'])
 def get_chart_data(file_id):
     """Get chart data for a log file"""
@@ -2322,3 +2366,340 @@ def export_log_pdf(file_id):
         mimetype='application/pdf',
         headers={'Content-Disposition': f'attachment; filename={log_file.original_filename}_report.pdf'}
     )
+
+
+# ============================================
+# Live Log Streaming Endpoints
+# ============================================
+
+@api_bp.route('/log-files/<int:file_id>/stream', methods=['GET'])
+def stream_log_file(file_id):
+    """
+    Stream log file updates using Server-Sent Events (SSE).
+    Watches for new entries added to the log file.
+    """
+    from flask import Response, stream_with_context
+    import time
+
+    log_file = LogFile.query.get_or_404(file_id)
+    last_line = request.args.get('last_line', 0, type=int)
+
+    def generate():
+        nonlocal last_line
+        while True:
+            # Get new entries since last_line
+            new_entries = LogEntry.query.filter(
+                LogEntry.log_file_id == file_id,
+                LogEntry.line_number > last_line
+            ).order_by(LogEntry.line_number).limit(100).all()
+
+            if new_entries:
+                last_line = new_entries[-1].line_number
+                data = {
+                    'entries': [e.to_dict() for e in new_entries],
+                    'last_line': last_line
+                }
+                yield f"data: {json.dumps(data)}\n\n"
+
+            # Send heartbeat every 30 seconds
+            yield f": heartbeat\n\n"
+            time.sleep(2)  # Poll every 2 seconds
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        }
+    )
+
+
+def get_fw_password_from_aws():
+    """
+    Get the firmware password from AWS SSM Parameter Store.
+    Returns the password or None if unable to retrieve.
+    """
+    import subprocess
+    import os
+
+    try:
+        env = os.environ.copy()
+        env['AWS_PROFILE'] = 'fw-ops'
+
+        cmd = [
+            'aws', 'ssm', 'get-parameter',
+            '--name', '/lockness/grant/fw-developer/prod/fw-password/key',
+            '--with-decryption',
+            '--region', 'us-west-1',
+            '--query', 'Parameter.Value',
+            '--output', 'text'
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, env=env)
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+# Cache the AWS password
+_cached_fw_password = None
+
+def get_cached_fw_password():
+    """Get cached firmware password, fetching from AWS if needed."""
+    global _cached_fw_password
+    if _cached_fw_password is None:
+        _cached_fw_password = get_fw_password_from_aws()
+    return _cached_fw_password
+
+
+def ssh_connect_with_fallback(host, port, username, password, timeout=10):
+    """
+    Try to connect via SSH using multiple methods:
+    1. Empty password (none auth - common for cameras)
+    2. SSH key (from default locations)
+    3. Password authentication (user-provided or AWS SSM)
+    Returns (client, auth_method) or raises exception
+    """
+    import paramiko
+    import subprocess
+    from pathlib import Path
+
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    # 1. Try empty password first (none auth - cameras often use this)
+    try:
+        client.connect(
+            hostname=host,
+            port=port,
+            username=username,
+            password='',
+            timeout=timeout,
+            look_for_keys=False,
+            allow_agent=False
+        )
+        return client, "none_auth"
+    except paramiko.AuthenticationException:
+        pass
+    except paramiko.SSHException:
+        pass
+
+    # 2. Try SSH key authentication
+    try:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(
+            hostname=host,
+            port=port,
+            username=username,
+            timeout=timeout,
+            look_for_keys=True,
+            allow_agent=True
+        )
+        return client, "ssh_key"
+    except paramiko.AuthenticationException:
+        pass
+    except paramiko.SSHException:
+        pass
+
+    # 3. Try AWS firmware password
+    fw_password = get_cached_fw_password()
+    if fw_password:
+        try:
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(
+                hostname=host,
+                port=port,
+                username=username,
+                password=fw_password,
+                timeout=timeout,
+                look_for_keys=False,
+                allow_agent=False
+            )
+            return client, "aws_ssm"
+        except paramiko.AuthenticationException:
+            pass
+        except paramiko.SSHException:
+            pass
+
+    # 4. Try user-provided password
+    client.connect(
+        hostname=host,
+        port=port,
+        username=username,
+        password=password,
+        timeout=timeout,
+        look_for_keys=False,
+        allow_agent=False
+    )
+    return client, "password"
+
+
+@api_bp.route('/stream/test-connection', methods=['POST'])
+def test_ssh_connection():
+    """
+    Test SSH connection to camera without streaming.
+    """
+    import paramiko
+
+    data = request.get_json() or {}
+    host = data.get('host', '192.168.50.1')
+    username = data.get('username', 'root')
+    password = data.get('password', 'root')
+    port = data.get('port', 22)
+
+    try:
+        client, auth_method = ssh_connect_with_fallback(host, port, username, password, timeout=5)
+
+        # Try to run a simple command
+        stdin, stdout, stderr = client.exec_command('echo "connected"', timeout=5)
+        result = stdout.read().decode().strip()
+        client.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'Successfully connected to {host}:{port} (via {auth_method})'
+        })
+    except paramiko.AuthenticationException:
+        return jsonify({
+            'success': False,
+            'message': f'Authentication failed. Check username/password for {host} or ensure SSH key is configured.'
+        })
+    except paramiko.SSHException as e:
+        return jsonify({
+            'success': False,
+            'message': f'SSH error: {str(e)}'
+        })
+    except Exception as e:
+        error_msg = str(e)
+        if 'Connection refused' in error_msg:
+            error_msg = f'Connection refused. Is SSH enabled on {host}:{port}?'
+        elif 'timed out' in error_msg.lower() or 'timeout' in error_msg.lower():
+            error_msg = f'Connection timed out. Check if camera is reachable at {host}'
+        elif 'Connection reset' in error_msg:
+            error_msg = f'Connection reset. Camera at {host} may not be running SSH'
+        return jsonify({
+            'success': False,
+            'message': error_msg
+        })
+
+
+@api_bp.route('/stream/camera', methods=['GET'])
+def stream_camera_logs():
+    """
+    Stream live output from camera via SSH using Server-Sent Events.
+    Query params: host, username, password, port, command (or log_path for backward compat)
+    """
+    from flask import Response, stream_with_context
+    import time
+
+    host = request.args.get('host', '192.168.50.1')
+    username = request.args.get('username', 'root')
+    password = request.args.get('password', '')
+    port = request.args.get('port', 22, type=int)
+
+    # Support custom command or fall back to tail on log_path
+    command = request.args.get('command', '')
+    if not command:
+        log_path = request.args.get('log_path', '/var/log/messages')
+        lines = request.args.get('lines', 50, type=int)
+        command = f'tail -n {lines} -f {log_path}'
+
+    def generate():
+        try:
+            import paramiko
+            import select
+
+            # Connect via SSH (try key first, then password)
+            client, auth_method = ssh_connect_with_fallback(host, port, username, password, timeout=10)
+
+            # Start the command
+            transport = client.get_transport()
+            channel = transport.open_session()
+            channel.get_pty()  # Get pseudo-terminal for interactive commands
+            channel.exec_command(command)
+
+            # Send initial connection success
+            yield f"data: {json.dumps({'type': 'connected', 'host': host, 'command': command})}\n\n"
+
+            # Stream output
+            while True:
+                if channel.recv_ready():
+                    data = channel.recv(4096).decode('utf-8', errors='replace')
+                    lines_data = data.strip().split('\n')
+                    for line in lines_data:
+                        if line:
+                            yield f"data: {json.dumps({'type': 'log', 'content': line})}\n\n"
+
+                if channel.exit_status_ready():
+                    break
+
+                # Check for client disconnect
+                time.sleep(0.1)
+
+            client.close()
+            yield f"data: {json.dumps({'type': 'disconnected'})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        }
+    )
+
+
+@api_bp.route('/log-files/<int:file_id>/tail', methods=['GET'])
+def tail_log_file(file_id):
+    """
+    Get the last N lines of a log file (for polling-based tail).
+    """
+    log_file = LogFile.query.get_or_404(file_id)
+    lines = request.args.get('lines', 50, type=int)
+    lines = min(lines, 500)  # Cap at 500
+
+    entries = LogEntry.query.filter_by(log_file_id=file_id)\
+        .order_by(LogEntry.line_number.desc())\
+        .limit(lines)\
+        .all()
+
+    # Reverse to get chronological order
+    entries = list(reversed(entries))
+
+    return jsonify({
+        'entries': [e.to_dict() for e in entries],
+        'total_lines': log_file.total_lines,
+        'last_line': entries[-1].line_number if entries else 0
+    })
+
+
+@api_bp.route('/log-files/<int:file_id>/new-entries', methods=['GET'])
+def get_new_entries(file_id):
+    """
+    Get entries newer than a specific line number (for polling-based updates).
+    """
+    log_file = LogFile.query.get_or_404(file_id)
+    after_line = request.args.get('after', 0, type=int)
+    limit = request.args.get('limit', 100, type=int)
+    limit = min(limit, 500)
+
+    entries = LogEntry.query.filter(
+        LogEntry.log_file_id == file_id,
+        LogEntry.line_number > after_line
+    ).order_by(LogEntry.line_number).limit(limit).all()
+
+    return jsonify({
+        'entries': [e.to_dict() for e in entries],
+        'count': len(entries),
+        'last_line': entries[-1].line_number if entries else after_line,
+        'has_more': len(entries) == limit
+    })

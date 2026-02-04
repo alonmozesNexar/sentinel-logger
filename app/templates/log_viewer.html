@@ -1,271 +1,487 @@
 {% extends "base.html" %}
 
-{% block title %}Log Viewer - {{ log_file.original_filename }} - Sentinel Logger{% endblock %}
+{% block title %}{{ log_file.original_filename }} - Log Viewer{% endblock %}
 
 {% block extra_css %}
 <style>
-/* Service color palette - each service gets a unique color */
-.service-color-0 { background-color: rgba(59, 130, 246, 0.15) !important; border-left: 4px solid #3b82f6 !important; }
-.service-color-1 { background-color: rgba(16, 185, 129, 0.15) !important; border-left: 4px solid #10b981 !important; }
-.service-color-2 { background-color: rgba(245, 158, 11, 0.15) !important; border-left: 4px solid #f59e0b !important; }
-.service-color-3 { background-color: rgba(239, 68, 68, 0.15) !important; border-left: 4px solid #ef4444 !important; }
-.service-color-4 { background-color: rgba(139, 92, 246, 0.15) !important; border-left: 4px solid #8b5cf6 !important; }
-.service-color-5 { background-color: rgba(236, 72, 153, 0.15) !important; border-left: 4px solid #ec4899 !important; }
-.service-color-6 { background-color: rgba(6, 182, 212, 0.15) !important; border-left: 4px solid #06b6d4 !important; }
-.service-color-7 { background-color: rgba(132, 204, 22, 0.15) !important; border-left: 4px solid #84cc16 !important; }
-.service-color-8 { background-color: rgba(249, 115, 22, 0.15) !important; border-left: 4px solid #f97316 !important; }
-.service-color-9 { background-color: rgba(99, 102, 241, 0.15) !important; border-left: 4px solid #6366f1 !important; }
-.service-color-10 { background-color: rgba(20, 184, 166, 0.15) !important; border-left: 4px solid #14b8a6 !important; }
-.service-color-11 { background-color: rgba(168, 85, 247, 0.15) !important; border-left: 4px solid #a855f7 !important; }
+/* ============================================
+   Professional Log Viewer Styles
+   ============================================ */
 
-/* Service badge colors */
-.service-badge-0 { background-color: #3b82f6 !important; }
-.service-badge-1 { background-color: #10b981 !important; }
-.service-badge-2 { background-color: #f59e0b !important; color: #000 !important; }
-.service-badge-3 { background-color: #ef4444 !important; }
-.service-badge-4 { background-color: #8b5cf6 !important; }
-.service-badge-5 { background-color: #ec4899 !important; }
-.service-badge-6 { background-color: #06b6d4 !important; }
-.service-badge-7 { background-color: #84cc16 !important; color: #000 !important; }
-.service-badge-8 { background-color: #f97316 !important; }
-.service-badge-9 { background-color: #6366f1 !important; }
-.service-badge-10 { background-color: #14b8a6 !important; }
-.service-badge-11 { background-color: #a855f7 !important; }
+/* Toolbar */
+.viewer-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--bg-secondary, #f8fafc);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    align-items: center;
+}
 
-/* Log entry styling */
-.log-entry {
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-right: 12px;
+    border-right: 1px solid var(--border-color, #e2e8f0);
+}
+
+.toolbar-group:last-child {
+    border-right: none;
+}
+
+.toolbar-btn {
+    padding: 6px 10px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    background: var(--bg-primary, white);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s;
+    color: var(--text-secondary, #64748b);
+}
+
+.toolbar-btn:hover {
+    background: var(--bg-tertiary, #f1f5f9);
+    color: var(--text-primary, #1e293b);
+}
+
+.toolbar-btn.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+}
+
+.toolbar-btn i {
+    font-size: 1rem;
+}
+
+.toolbar-divider {
+    width: 1px;
+    height: 24px;
+    background: var(--border-color, #e2e8f0);
+    margin: 0 4px;
+}
+
+/* Search Bar */
+.search-container {
+    flex: 1;
+    min-width: 300px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.search-input-group {
+    flex: 1;
+    position: relative;
+}
+
+.search-input-group input {
+    width: 100%;
+    padding: 8px 12px 8px 36px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background: var(--bg-primary, white);
+}
+
+.search-input-group input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.search-input-group .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted, #94a3b8);
+}
+
+.search-options {
+    display: flex;
+    gap: 4px;
+}
+
+.search-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: 8px;
+}
+
+.search-option-btn {
+    padding: 4px 8px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    background: var(--bg-primary, white);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.search-option-btn.active {
+    background: #dbeafe;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+}
+
+/* Search mode toggle (Filter vs Highlight) */
+.search-mode-toggle {
+    display: flex;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.search-mode-toggle button {
+    padding: 6px 12px;
+    border: none;
+    background: var(--bg-primary, white);
+    font-size: 0.8rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.search-mode-toggle button:not(:last-child) {
+    border-right: 1px solid var(--border-color, #e2e8f0);
+}
+
+.search-mode-toggle button.active {
+    background: #3b82f6;
+    color: white;
+}
+
+.search-mode-toggle button:hover:not(.active) {
+    background: var(--bg-tertiary, #f1f5f9);
+}
+
+/* Match navigation */
+.match-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.85rem;
+    color: var(--text-muted, #64748b);
+}
+
+.match-nav .count {
+    padding: 2px 8px;
+    background: var(--bg-tertiary, #f1f5f9);
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.match-nav button {
+    padding: 4px 8px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    background: var(--bg-primary, white);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.match-nav button:hover {
+    background: var(--bg-tertiary, #f1f5f9);
+}
+
+/* Log Entry Styles */
+.log-container {
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--bg-secondary, #f8fafc);
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+}
+
+.log-entries {
+    max-height: 70vh;
+    overflow-y: auto;
     font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
     font-size: 0.85rem;
-    padding: 8px 12px;
-    border-bottom: 1px solid #e5e7eb;
+}
+
+.log-entries.wrap-text .raw-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.log-entries.no-wrap .raw-content {
+    white-space: pre;
+    overflow-x: auto;
+}
+
+.log-entry {
     display: flex;
-    gap: 12px;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border-color, #f1f5f9);
+    position: relative;
     align-items: flex-start;
-    transition: background-color 0.15s;
+    transition: background 0.1s;
 }
 
 .log-entry:hover {
-    filter: brightness(0.95);
+    background: var(--bg-tertiary, #f8fafc) !important;
+}
+
+.log-entry.selected {
+    outline: 2px solid #3b82f6;
+    outline-offset: -2px;
+}
+
+.log-entry.bookmarked {
+    background: rgba(245, 158, 11, 0.1) !important;
+    border-left: 3px solid #f59e0b !important;
+}
+
+.log-entry.current-match {
+    background: rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Line number */
+.log-entry .line-num {
+    min-width: 50px;
+    color: var(--text-muted, #94a3b8);
+    text-align: right;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+/* Time diff indicator */
+.log-entry .time-diff {
+    min-width: 60px;
+    font-size: 0.75rem;
+    color: var(--text-muted, #94a3b8);
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.log-entry .time-diff.slow {
+    color: #f59e0b;
+    font-weight: 500;
+}
+
+.log-entry .time-diff.very-slow {
+    color: #ef4444;
+    font-weight: 600;
+}
+
+/* Timestamp */
+.log-entry .timestamp {
+    min-width: 90px;
+    color: var(--text-secondary, #64748b);
+    flex-shrink: 0;
+}
+
+/* Severity badges */
+.log-entry .severity-badge {
+    min-width: 50px;
+    flex-shrink: 0;
+}
+
+.badge-critical { background: #1e1e1e; color: #fff; }
+.badge-error { background: #ef4444; color: #fff; }
+.badge-warning { background: #f59e0b; color: #000; }
+.badge-info { background: #3b82f6; color: #fff; }
+.badge-debug { background: #6b7280; color: #fff; }
+
+/* Service */
+.log-entry .service {
+    min-width: 100px;
+    flex-shrink: 0;
+}
+
+/* Content */
+.log-entry .raw-content {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Highlighted search matches */
+.log-entry .raw-content mark {
+    background: #fef08a;
+    color: inherit;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+
+.log-entry .raw-content mark.current {
+    background: #fb923c;
+}
+
+/* JSON highlighting */
+.json-key { color: #0ea5e9; }
+.json-string { color: #22c55e; }
+.json-number { color: #f97316; }
+.json-boolean { color: #a855f7; }
+.json-null { color: #6b7280; }
+
+/* Stack trace collapsing */
+.stack-trace-toggle {
+    color: #6b7280;
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    background: var(--bg-tertiary, #f1f5f9);
+    border-radius: 3px;
+    margin-left: 8px;
+}
+
+.stack-trace-toggle:hover {
+    background: var(--border-color, #e2e8f0);
+}
+
+.stack-trace {
+    display: none;
+    margin-left: 20px;
+    padding: 8px;
+    background: var(--bg-tertiary, #f8fafc);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: var(--text-secondary, #64748b);
+}
+
+.stack-trace.expanded {
+    display: block;
+}
+
+/* Action buttons on hover */
+.log-entry .entry-actions {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: none;
+    gap: 2px;
+}
+
+.log-entry:hover .entry-actions {
+    display: flex;
+}
+
+.entry-action-btn {
+    padding: 2px 6px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    background: var(--bg-primary, white);
+    border-radius: 4px;
+    font-size: 0.7rem;
+    cursor: pointer;
+}
+
+.entry-action-btn:hover {
+    background: var(--bg-tertiary, #f1f5f9);
 }
 
 /* Severity row highlighting */
-.log-entry.severity-error,
-.log-entry.severity-critical {
-    background-color: rgba(239, 68, 68, 0.2) !important;
-    border-left: 4px solid #ef4444 !important;
+.log-entry.severity-critical,
+.log-entry.severity-error {
+    background: rgba(239, 68, 68, 0.08);
+    border-left: 3px solid #ef4444;
 }
 
 .log-entry.severity-warning {
-    background-color: rgba(245, 158, 11, 0.2) !important;
-    border-left: 4px solid #f59e0b !important;
+    background: rgba(245, 158, 11, 0.08);
+    border-left: 3px solid #f59e0b;
 }
 
-.log-entry .line-num {
-    min-width: 50px;
-    color: #6b7280;
-    font-weight: 600;
-    flex-shrink: 0;
-}
+/* Service colors */
+.service-color-0 { border-left: 3px solid #3b82f6; }
+.service-color-1 { border-left: 3px solid #10b981; }
+.service-color-2 { border-left: 3px solid #f59e0b; }
+.service-color-3 { border-left: 3px solid #ef4444; }
+.service-color-4 { border-left: 3px solid #8b5cf6; }
+.service-color-5 { border-left: 3px solid #ec4899; }
 
-.log-entry .timestamp {
-    min-width: 100px;
-    color: #6b7280;
-    flex-shrink: 0;
-}
-
-.log-entry .severity {
-    min-width: 80px;
-    flex-shrink: 0;
-}
-
-.log-entry .service-name {
-    min-width: 120px;
-    flex-shrink: 0;
-}
-
-.log-entry .raw-content {
-    flex: 1;
-    word-break: break-word;
-    white-space: pre-wrap;
-}
-
-/* Service legend */
-.service-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 16px;
-}
-
-.service-legend-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    border: 2px solid transparent;
-}
-
-.service-legend-item:hover {
-    transform: scale(1.05);
-}
-
-.service-legend-item.active {
-    border-color: #000;
-    font-weight: 600;
-}
-
-.service-legend-item .color-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-}
-
-/* Quick filter buttons */
-.quick-filters {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 16px;
-}
-
-.quick-filter-btn {
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    border: 1px solid #e5e7eb;
-    background: white;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.quick-filter-btn:hover {
-    background: #f3f4f6;
-}
-
-.quick-filter-btn.active {
-    background: #3b82f6;
+/* Copy toast */
+.copy-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #10b981;
     color: white;
-    border-color: #3b82f6;
+    padding: 12px 20px;
+    border-radius: 8px;
+    display: none;
+    z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
-/* Dark mode support */
-[data-theme="dark"] .log-entry {
-    border-bottom-color: #374151;
-}
-
-[data-theme="dark"] .log-entry .line-num,
-[data-theme="dark"] .log-entry .timestamp {
-    color: #9ca3af;
-}
-
-[data-theme="dark"] .quick-filter-btn {
-    background: #374151;
-    border-color: #4b5563;
-    color: #e5e7eb;
-}
-
-[data-theme="dark"] .quick-filter-btn:hover {
-    background: #4b5563;
-}
-
-/* Stats card */
-.stats-card {
-    text-align: center;
-    padding: 12px;
-}
-
-.stats-card .stat-value {
-    font-size: 1.5rem;
-    font-weight: 700;
-}
-
-.stats-card .stat-label {
-    font-size: 0.8rem;
-    color: #6b7280;
-    text-transform: uppercase;
-}
-
-/* ============================================
-   Log Minimap - Visual overview of entire log
-   ============================================ */
+/* Minimap */
 .minimap-container {
     position: fixed;
     right: 20px;
     top: 200px;
     width: 120px;
-    background: var(--bg-secondary, #fff);
-    border: 1px solid var(--border-color, #e5e7eb);
+    background: var(--bg-primary, white);
+    border: 1px solid var(--border-color, #e2e8f0);
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     z-index: 100;
     overflow: hidden;
-    transition: all 0.3s ease;
-}
-
-.minimap-container.collapsed {
-    width: 40px;
-    height: 40px !important;
-}
-
-.minimap-container.collapsed .minimap-header span,
-.minimap-container.collapsed .minimap-canvas-container,
-.minimap-container.collapsed .minimap-stats {
-    display: none;
+    cursor: move;
+    user-select: none;
 }
 
 .minimap-header {
-    padding: 8px 10px;
-    background: var(--bg-tertiary, #f3f4f6);
-    border-bottom: 1px solid var(--border-color, #e5e7eb);
+    padding: 8px;
+    background: var(--bg-secondary, #f8fafc);
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    cursor: pointer;
-    font-size: 0.75rem;
-    font-weight: 600;
-}
-
-.minimap-header i {
-    transition: transform 0.3s;
-}
-
-.minimap-container.collapsed .minimap-header i {
-    transform: rotate(180deg);
-}
-
-.minimap-canvas-container {
-    position: relative;
-    padding: 8px;
 }
 
 .minimap-canvas {
     width: 100%;
     height: 200px;
-    border-radius: 4px;
     cursor: pointer;
 }
 
 .minimap-viewport {
     position: absolute;
-    left: 8px;
-    right: 8px;
+    left: 0;
+    right: 0;
     background: rgba(59, 130, 246, 0.2);
     border: 2px solid #3b82f6;
-    border-radius: 3px;
     pointer-events: none;
-    transition: top 0.1s ease;
+}
+
+.minimap-container.collapsed {
+    width: 36px;
+    height: 36px;
+}
+
+.minimap-container.collapsed .minimap-canvas,
+.minimap-container.collapsed .minimap-viewport,
+.minimap-container.collapsed .minimap-stats {
+    display: none;
 }
 
 .minimap-stats {
-    padding: 8px 10px;
-    border-top: 1px solid var(--border-color, #e5e7eb);
+    padding: 6px 8px;
     font-size: 0.7rem;
     display: flex;
     justify-content: space-around;
+    border-top: 1px solid var(--border-color, #e2e8f0);
 }
 
 .minimap-stat {
@@ -277,345 +493,578 @@
     display: block;
 }
 
-.minimap-stat .label {
-    color: #6b7280;
-    text-transform: uppercase;
-    font-size: 0.6rem;
-}
-
 .minimap-stat.errors .count { color: #ef4444; }
 .minimap-stat.warnings .count { color: #f59e0b; }
 
-/* Minimap tooltip */
-.minimap-tooltip {
-    position: absolute;
-    left: -10px;
-    transform: translateX(-100%);
-    background: #1f2937;
-    color: white;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.7rem;
+/* Bookmarks panel */
+.bookmarks-panel {
+    position: fixed;
+    right: 140px;
+    top: 200px;
+    width: 250px;
+    max-height: 400px;
+    background: var(--bg-primary, white);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    z-index: 100;
+    display: none;
+}
+
+.bookmarks-panel.visible {
+    display: block;
+}
+
+.bookmarks-panel-header {
+    padding: 10px 12px;
+    background: var(--bg-secondary, #f8fafc);
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.bookmarks-list {
+    max-height: 350px;
+    overflow-y: auto;
+}
+
+.bookmark-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color, #f1f5f9);
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.bookmark-item:hover {
+    background: var(--bg-tertiary, #f8fafc);
+}
+
+.bookmark-item .line-num {
+    font-weight: 600;
+    color: #3b82f6;
+}
+
+.bookmark-item .preview {
+    color: var(--text-muted, #64748b);
+    font-size: 0.8rem;
     white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.minimap-canvas-container:hover .minimap-tooltip {
-    opacity: 1;
+/* Stats bar */
+.stats-bar {
+    display: flex;
+    gap: 16px;
+    padding: 8px 16px;
+    background: var(--bg-secondary, #f8fafc);
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    font-size: 0.85rem;
 }
 
-/* Dark mode minimap */
-[data-theme="dark"] .minimap-container {
-    background: #1f2937;
-    border-color: #374151;
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
-[data-theme="dark"] .minimap-header {
-    background: #374151;
-    border-color: #4b5563;
+.stat-item .value {
+    font-weight: 600;
 }
 
-/* Responsive - hide on small screens */
+.stat-item.errors .value { color: #ef4444; }
+.stat-item.warnings .value { color: #f59e0b; }
+
+/* Filter pills */
+.filter-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+}
+
+.filter-pill {
+    padding: 4px 10px;
+    background: var(--bg-tertiary, #f1f5f9);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 16px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.filter-pill:hover {
+    background: var(--border-color, #e2e8f0);
+}
+
+.filter-pill.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+}
+
+.filter-pill .remove {
+    margin-left: 4px;
+    opacity: 0.7;
+}
+
+/* Dark mode */
+[data-theme="dark"] .viewer-toolbar,
+[data-theme="dark"] .log-header,
+[data-theme="dark"] .stats-bar {
+    background: #1e293b;
+    border-color: #334155;
+}
+
+[data-theme="dark"] .toolbar-btn,
+[data-theme="dark"] .search-option-btn,
+[data-theme="dark"] .search-input-group input {
+    background: #0f172a;
+    border-color: #334155;
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .log-container {
+    border-color: #334155;
+}
+
+[data-theme="dark"] .log-entry {
+    border-color: #1e293b;
+}
+
+[data-theme="dark"] .log-entry:hover {
+    background: #1e293b !important;
+}
+
+[data-theme="dark"] .minimap-container,
+[data-theme="dark"] .bookmarks-panel {
+    background: #0f172a;
+    border-color: #334155;
+}
+
+/* Responsive */
 @media (max-width: 1200px) {
-    .minimap-container {
-        display: none;
+    .minimap-container,
+    .bookmarks-panel {
+        display: none !important;
     }
 }
 
-/* Jump to line modal */
-.jump-to-line-input {
-    font-size: 1.5rem;
-    text-align: center;
+@media (max-width: 768px) {
+    .log-entry .timestamp,
+    .log-entry .time-diff {
+        display: none;
+    }
+
+    .toolbar-group {
+        flex-wrap: wrap;
+    }
+}
+
+/* Pagination */
+.pagination-container {
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--border-color, #e2e8f0);
+}
+
+/* Time Range Picker */
+.time-range-picker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--bg-tertiary, #f1f5f9);
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+}
+
+.time-range-picker label {
+    font-size: 0.8rem;
+    color: var(--text-muted, #64748b);
+    margin-right: 4px;
+}
+
+.time-range-picker input[type="datetime-local"] {
+    padding: 4px 8px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 4px;
+    font-size: 0.85rem;
+    background: var(--bg-primary, white);
+}
+
+.time-preset-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    background: var(--bg-primary, white);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.time-preset-btn:hover {
+    background: var(--bg-tertiary, #f1f5f9);
+}
+
+.time-preset-btn.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+}
+
+/* Request ID / Trace ID highlighting */
+.trace-id {
+    background: rgba(139, 92, 246, 0.15);
+    color: #7c3aed;
+    padding: 1px 4px;
+    border-radius: 3px;
     font-family: monospace;
+    font-size: 0.85em;
+    cursor: pointer;
+    text-decoration: underline dotted;
+}
+
+.trace-id:hover {
+    background: rgba(139, 92, 246, 0.3);
+}
+
+/* Error timeline mini-chart */
+.error-timeline {
+    height: 40px;
+    background: var(--bg-tertiary, #f8fafc);
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    padding: 4px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.error-timeline canvas {
+    flex: 1;
+    height: 32px;
+}
+
+.error-timeline-label {
+    font-size: 0.75rem;
+    color: var(--text-muted, #64748b);
+    white-space: nowrap;
+}
+
+[data-theme="dark"] .time-range-picker,
+[data-theme="dark"] .error-timeline {
+    background: #1e293b;
+}
+
+[data-theme="dark"] .time-range-picker input,
+[data-theme="dark"] .time-preset-btn {
+    background: #0f172a;
+    border-color: #334155;
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .trace-id {
+    background: rgba(139, 92, 246, 0.25);
+    color: #a78bfa;
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-12">
+<!-- Page Header -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
         <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
-                <li class="breadcrumb-item"><a href="{{ url_for('main.analyze', file_id=log_file.id) }}">Analysis</a></li>
-                <li class="breadcrumb-item active" aria-current="page">Log Viewer</li>
+            <ol class="breadcrumb mb-1" style="font-size: 0.85rem;">
+                <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Logs</a></li>
+                <li class="breadcrumb-item active">{{ log_file.original_filename }}</li>
             </ol>
         </nav>
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div>
-                <h1 class="h3 mb-1">
-                    <i class="bi bi-terminal me-2"></i>{{ log_file.original_filename }}
-                </h1>
-                <p class="text-muted mb-0">
-                    View raw log with color-coded services for easy reading
-                </p>
-            </div>
-            <div class="d-flex gap-2">
-                <a href="{{ url_for('main.analyze', file_id=log_file.id) }}" class="btn btn-outline-primary">
-                    <i class="bi bi-robot me-1"></i>AI Analysis
-                </a>
-                <a href="/api/log-files/{{ log_file.id }}/export/csv" class="btn btn-outline-secondary">
-                    <i class="bi bi-download me-1"></i>Export CSV
-                </a>
-            </div>
-        </div>
+        <h1 class="h5 mb-0 d-flex align-items-center gap-2">
+            <i class="bi bi-file-text text-primary"></i>
+            {{ log_file.original_filename }}
+            <span class="badge bg-secondary" style="font-size: 0.7rem;">{{ log_file.total_lines }} lines</span>
+        </h1>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('main.index') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Back to Logs
+        </a>
     </div>
 </div>
 
-<!-- Stats Row -->
-<div class="row mb-4">
-    <div class="col-md-3 col-6">
-        <div class="card stats-card">
-            <div class="stat-value">{{ log_file.total_lines }}</div>
-            <div class="stat-label">Total Lines</div>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="card stats-card">
-            <div class="stat-value text-danger">{{ log_file.error_count }}</div>
-            <div class="stat-label">Errors</div>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="card stats-card">
-            <div class="stat-value text-warning">{{ log_file.warning_count }}</div>
-            <div class="stat-label">Warnings</div>
-        </div>
-    </div>
-    <div class="col-md-3 col-6">
-        <div class="card stats-card">
-            <div class="stat-value text-info">{{ services|length }}</div>
-            <div class="stat-label">Services</div>
-        </div>
-    </div>
-</div>
-
-<!-- Service Legend -->
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-palette me-2"></i>Services (click to filter)</h5>
-    </div>
-    <div class="card-body">
-        <div class="service-legend" id="serviceLegend">
-            <div class="service-legend-item {% if not current_service %}active{% endif %}"
-                 onclick="filterByService('')" style="background-color: #f3f4f6;">
-                <span class="color-dot" style="background: linear-gradient(45deg, #3b82f6, #10b981, #f59e0b);"></span>
-                <span>All Services</span>
-            </div>
-            {% for svc in services %}
-            <div class="service-legend-item service-color-{{ loop.index0 % 12 }} {% if current_service == svc %}active{% endif %}"
-                 onclick="filterByService('{{ svc }}')"
-                 data-service="{{ svc }}">
-                <span class="color-dot service-badge-{{ loop.index0 % 12 }}"></span>
-                <span>{{ svc }}</span>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-
-<!-- Filters -->
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-funnel me-2"></i>Filters</h5>
-    </div>
-    <div class="card-body">
-        <!-- Quick Severity Filters -->
-        <div class="mb-3">
-            <label class="form-label fw-bold">Quick Filters:</label>
-            <div class="quick-filters">
-                <button type="button" class="quick-filter-btn {% if not current_severity %}active{% endif %}"
-                        onclick="filterBySeverity('')">
-                    All Levels
-                </button>
-                <button type="button" class="quick-filter-btn {% if current_severity == 'ERROR' %}active{% endif %}"
-                        onclick="filterBySeverity('ERROR')">
-                    <i class="bi bi-exclamation-circle text-danger me-1"></i>Errors Only
-                </button>
-                <button type="button" class="quick-filter-btn {% if current_severity == 'WARNING' %}active{% endif %}"
-                        onclick="filterBySeverity('WARNING')">
-                    <i class="bi bi-exclamation-triangle text-warning me-1"></i>Warnings Only
-                </button>
-                <button type="button" class="quick-filter-btn {% if current_severity == 'CRITICAL' %}active{% endif %}"
-                        onclick="filterBySeverity('CRITICAL')">
-                    <i class="bi bi-x-octagon text-dark me-1"></i>Critical Only
-                </button>
-            </div>
+<!-- Main Toolbar -->
+<div class="viewer-toolbar">
+    <!-- Search -->
+    <div class="search-container">
+        <div class="search-input-group">
+            <i class="bi bi-search search-icon"></i>
+            <input type="text" id="searchInput" placeholder="Search logs... (press / to focus)"
+                   value="{{ search }}" autocomplete="off">
         </div>
 
-        <!-- Search Box -->
-        <form method="get" class="row g-3 align-items-end">
-            <input type="hidden" name="severity" id="severityInput" value="{{ current_severity or '' }}">
-            <input type="hidden" name="service" id="serviceInput" value="{{ current_service or '' }}">
-
-            <div class="col-md-6">
-                <label for="search" class="form-label fw-bold">Search in Logs</label>
-                <div class="input-group">
-                    <span class="input-group-text"><i class="bi bi-search"></i></span>
-                    <input type="text" class="form-control" id="search" name="search"
-                           value="{{ search }}" placeholder="Search for text in logs...">
-                </div>
-            </div>
-            <div class="col-md-2">
-                <label for="per_page" class="form-label fw-bold">Show</label>
-                <select class="form-select" id="per_page" name="per_page">
-                    <option value="50" {% if entries.per_page == 50 %}selected{% endif %}>50 lines</option>
-                    <option value="100" {% if entries.per_page == 100 %}selected{% endif %}>100 lines</option>
-                    <option value="200" {% if entries.per_page == 200 %}selected{% endif %}>200 lines</option>
-                    <option value="500" {% if entries.per_page == 500 %}selected{% endif %}>500 lines</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <button type="submit" class="btn btn-primary w-100">
-                    <i class="bi bi-search me-1"></i>Search
-                </button>
-            </div>
-            <div class="col-md-2">
-                <a href="{{ url_for('main.view_log', file_id=log_file.id) }}" class="btn btn-outline-secondary w-100">
-                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
-                </a>
-            </div>
-        </form>
-
-        {% if current_severity or current_service or search %}
-        <div class="mt-3">
-            <span class="text-muted">Active filters:</span>
-            {% if current_severity %}
-            <span class="badge bg-primary ms-2">Severity: {{ current_severity }}</span>
-            {% endif %}
-            {% if current_service %}
-            <span class="badge bg-info ms-2">Service: {{ current_service }}</span>
-            {% endif %}
-            {% if search %}
-            <span class="badge bg-secondary ms-2">Search: "{{ search }}"</span>
-            {% endif %}
-        </div>
-        {% endif %}
-    </div>
-</div>
-
-<!-- Log Entries -->
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span>
-            <i class="bi bi-list-ul me-2"></i>
-            Showing {{ ((entries.page - 1) * entries.per_page) + 1 }} -
-            {% set end_count = entries.page * entries.per_page %}
-            {{ end_count if end_count < entries.total else entries.total }} of {{ entries.total }} entries
-        </span>
-        <div class="btn-group btn-group-sm">
-            <button class="btn btn-outline-secondary" onclick="toggleTimestamps()" title="Toggle timestamps">
-                <i class="bi bi-clock"></i>
+        <!-- Search Mode: Filter vs Highlight -->
+        <div class="search-mode-toggle">
+            <button type="button" id="searchModeFilter" class="{% if not search_action or search_action == 'filter' %}active{% endif %}" title="Filter: Search ALL entries and show only matches">
+                <i class="bi bi-funnel"></i>Filter
             </button>
-            <button class="btn btn-outline-secondary" onclick="toggleLineNumbers()" title="Toggle line numbers">
-                <i class="bi bi-123"></i>
+            <button type="button" id="searchModeHighlight" class="{% if search_action == 'highlight' %}active{% endif %}" title="Highlight: Mark matches on current page only">
+                <i class="bi bi-highlighter"></i>Highlight
             </button>
         </div>
-    </div>
-    <div class="card-body p-0">
-        <div id="logEntries" style="max-height: 70vh; overflow-y: auto;">
-            {% for entry in entries.items %}
-            {% set service_index = services.index(entry.service) if entry.service in services else 0 %}
-            <div class="log-entry service-color-{{ service_index % 12 }} severity-{{ (entry.severity or 'info')|lower }}">
-                <span class="line-num" title="Line {{ entry.line_number }}">{{ entry.line_number }}</span>
-                <span class="timestamp">{{ entry.timestamp.strftime('%H:%M:%S') if entry.timestamp else '' }}</span>
-                <span class="severity">
-                    {% if entry.severity == 'CRITICAL' %}
-                    <span class="badge bg-dark">CRIT</span>
-                    {% elif entry.severity == 'ERROR' %}
-                    <span class="badge bg-danger">ERR</span>
-                    {% elif entry.severity == 'WARNING' %}
-                    <span class="badge bg-warning text-dark">WARN</span>
-                    {% elif entry.severity == 'INFO' %}
-                    <span class="badge bg-info">INFO</span>
-                    {% else %}
-                    <span class="badge bg-secondary">DBG</span>
-                    {% endif %}
-                </span>
-                <span class="service-name">
-                    <span class="badge service-badge-{{ service_index % 12 }}">{{ entry.service or '-' }}</span>
-                </span>
-                <span class="raw-content">{{ entry.raw_content }}</span>
-            </div>
-            {% endfor %}
+
+        <!-- Search Options -->
+        <div class="search-options">
+            <button type="button" class="search-option-btn {% if not search_mode or search_mode == 'contains' %}active{% endif %}" data-mode="contains" title="Case-insensitive">Aa</button>
+            <button type="button" class="search-option-btn {% if search_mode == 'regex' %}active{% endif %}" data-mode="regex" title="Regular Expression">.*</button>
+            <button type="button" class="search-option-btn {% if search_mode == 'exact' %}active{% endif %}" data-mode="exact" title="Exact Match">""</button>
+        </div>
+
+        <!-- Search & Clear Buttons -->
+        <div class="search-actions">
+            <button type="button" class="btn btn-primary btn-sm" onclick="performSearch()" title="Search (Enter)">
+                <i class="bi bi-search me-1"></i>Search
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearSearch()" title="Clear search (Esc)">
+                <i class="bi bi-x-lg me-1"></i>Clear
+            </button>
+        </div>
+
+        <!-- Match Navigation -->
+        <div class="match-nav" id="matchNav" style="display: none;">
+            <span class="count"><span id="currentMatch">0</span>/<span id="totalMatches">0</span></span>
+            <button onclick="prevMatch()" title="Previous (Shift+Enter)"><i class="bi bi-chevron-up"></i></button>
+            <button onclick="nextMatch()" title="Next (Enter)"><i class="bi bi-chevron-down"></i></button>
         </div>
     </div>
-    <div class="card-footer">
-        <!-- Pagination -->
-        <nav aria-label="Log pagination">
-            <ul class="pagination justify-content-center mb-0">
-                {% if entries.has_prev %}
-                <li class="page-item">
-                    <a class="page-link" href="{{ url_for('main.view_log', file_id=log_file.id, page=1, severity=current_severity, service=current_service, search=search, per_page=entries.per_page) }}">
-                        <i class="bi bi-chevron-double-left"></i>
-                    </a>
-                </li>
-                <li class="page-item">
-                    <a class="page-link" href="{{ url_for('main.view_log', file_id=log_file.id, page=entries.prev_num, severity=current_severity, service=current_service, search=search, per_page=entries.per_page) }}">
-                        <i class="bi bi-chevron-left"></i> Prev
-                    </a>
-                </li>
-                {% else %}
-                <li class="page-item disabled">
-                    <span class="page-link"><i class="bi bi-chevron-double-left"></i></span>
-                </li>
-                <li class="page-item disabled">
-                    <span class="page-link"><i class="bi bi-chevron-left"></i> Prev</span>
-                </li>
-                {% endif %}
 
-                <li class="page-item disabled">
-                    <span class="page-link bg-primary text-white">Page {{ entries.page }} of {{ entries.pages }}</span>
-                </li>
+    <div class="toolbar-divider"></div>
 
-                {% if entries.has_next %}
-                <li class="page-item">
-                    <a class="page-link" href="{{ url_for('main.view_log', file_id=log_file.id, page=entries.next_num, severity=current_severity, service=current_service, search=search, per_page=entries.per_page) }}">
-                        Next <i class="bi bi-chevron-right"></i>
-                    </a>
-                </li>
-                <li class="page-item">
-                    <a class="page-link" href="{{ url_for('main.view_log', file_id=log_file.id, page=entries.pages, severity=current_severity, service=current_service, search=search, per_page=entries.per_page) }}">
-                        <i class="bi bi-chevron-double-right"></i>
-                    </a>
-                </li>
-                {% else %}
-                <li class="page-item disabled">
-                    <span class="page-link">Next <i class="bi bi-chevron-right"></i></span>
-                </li>
-                <li class="page-item disabled">
-                    <span class="page-link"><i class="bi bi-chevron-double-right"></i></span>
-                </li>
-                {% endif %}
+    <!-- View Controls -->
+    <div class="toolbar-group">
+        <button class="toolbar-btn active" id="btnWrapText" onclick="toggleWrap()" title="Word Wrap (Alt+Z)">
+            <i class="bi bi-text-wrap"></i>
+        </button>
+        <button class="toolbar-btn" id="btnLineNumbers" onclick="toggleLineNumbers()" title="Line Numbers">
+            <i class="bi bi-list-ol"></i>
+        </button>
+        <button class="toolbar-btn" id="btnTimestamps" onclick="toggleTimestamps()" title="Timestamps">
+            <i class="bi bi-clock"></i>
+        </button>
+        <button class="toolbar-btn" id="btnTimeDiff" onclick="toggleTimeDiff()" title="Time Diff">
+            <i class="bi bi-stopwatch"></i>
+        </button>
+    </div>
+
+    <div class="toolbar-group">
+        <button class="toolbar-btn" onclick="decreaseFontSize()" title="Decrease Font"><i class="bi bi-dash"></i></button>
+        <span style="font-size: 0.8rem; min-width: 30px; text-align: center;" id="fontSizeDisplay">14</span>
+        <button class="toolbar-btn" onclick="increaseFontSize()" title="Increase Font"><i class="bi bi-plus"></i></button>
+    </div>
+
+    <div class="toolbar-divider"></div>
+
+    <!-- Actions -->
+    <div class="toolbar-group">
+        <button class="toolbar-btn" onclick="toggleBookmarksPanel()" title="Bookmarks (B)">
+            <i class="bi bi-bookmark"></i>
+            <span id="bookmarkCount">0</span>
+        </button>
+        <button class="toolbar-btn" onclick="copyFilteredLogs()" title="Copy All Visible (Shift+C)">
+            <i class="bi bi-clipboard"></i>
+        </button>
+        <div class="dropdown d-inline">
+            <button class="toolbar-btn dropdown-toggle" data-bs-toggle="dropdown" title="Export">
+                <i class="bi bi-download"></i>
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#" onclick="exportLogs('txt')"><i class="bi bi-file-text me-2"></i>Text (.txt)</a></li>
+                <li><a class="dropdown-item" href="#" onclick="exportLogs('json')"><i class="bi bi-filetype-json me-2"></i>JSON</a></li>
+                <li><a class="dropdown-item" href="/api/log-files/{{ log_file.id }}/export/csv"><i class="bi bi-filetype-csv me-2"></i>CSV (all)</a></li>
             </ul>
-        </nav>
+        </div>
+    </div>
+
+    <div class="toolbar-divider"></div>
+
+    <!-- Severity Filters -->
+    <div class="toolbar-group">
+        <button class="toolbar-btn filter-severity {% if not current_severity %}active{% endif %}" data-severity="" title="All">All</button>
+        <button class="toolbar-btn filter-severity {% if current_severity == 'ERROR' %}active{% endif %}" data-severity="ERROR" title="Errors (E)">
+            <span class="badge bg-danger" style="font-size: 0.7rem;">{{ log_file.error_count }}</span>
+        </button>
+        <button class="toolbar-btn filter-severity {% if current_severity == 'WARNING' %}active{% endif %}" data-severity="WARNING" title="Warnings (W)">
+            <span class="badge bg-warning text-dark" style="font-size: 0.7rem;">{{ log_file.warning_count }}</span>
+        </button>
     </div>
 </div>
-{% endblock %}
 
-<!-- Log Minimap -->
+<!-- Service Filter Pills -->
+{% if services %}
+<div class="filter-pills">
+    <span style="font-size: 0.8rem; color: var(--text-muted); margin-right: 8px;">Services:</span>
+    <button class="filter-pill {% if not current_service %}active{% endif %}" onclick="filterByService('')">All</button>
+    {% for svc in services %}
+    <button class="filter-pill {% if current_service == svc %}active{% endif %}" onclick="filterByService('{{ svc }}')">{{ svc }}</button>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Time Range Filter -->
+<div class="time-range-picker">
+    <span style="font-size: 0.8rem; color: var(--text-muted);">Time Range:</span>
+    <div class="d-flex gap-1">
+        <button class="time-preset-btn" onclick="setTimePreset('1h')">Last 1h</button>
+        <button class="time-preset-btn" onclick="setTimePreset('6h')">Last 6h</button>
+        <button class="time-preset-btn" onclick="setTimePreset('24h')">Last 24h</button>
+        <button class="time-preset-btn" onclick="setTimePreset('all')" id="presetAll">All</button>
+    </div>
+    <div class="toolbar-divider" style="height: 20px;"></div>
+    <label>From:</label>
+    <input type="datetime-local" id="timeFrom" onchange="applyTimeFilter()">
+    <label>To:</label>
+    <input type="datetime-local" id="timeTo" onchange="applyTimeFilter()">
+    <button class="time-preset-btn" onclick="clearTimeFilter()" title="Clear time filter">
+        <i class="bi bi-x-lg"></i>
+    </button>
+</div>
+
+<!-- Error Timeline Mini-Chart -->
+<div class="error-timeline">
+    <span class="error-timeline-label">Error Density:</span>
+    <canvas id="errorTimelineChart"></canvas>
+    <span class="error-timeline-label" id="timelineRange"></span>
+</div>
+
+<!-- Log Container -->
+<div class="log-container">
+    <div class="log-header">
+        <span>
+            Showing {{ ((entries.page - 1) * entries.per_page) + 1 }} -
+            {{ [entries.page * entries.per_page, entries.total]|min }} of {{ entries.total }} entries
+        </span>
+        <div>
+            <select id="perPageSelect" class="form-select form-select-sm" style="width: auto; display: inline-block;" onchange="changePerPage(this.value)">
+                <option value="50" {% if entries.per_page == 50 %}selected{% endif %}>50/page</option>
+                <option value="100" {% if entries.per_page == 100 %}selected{% endif %}>100/page</option>
+                <option value="200" {% if entries.per_page == 200 %}selected{% endif %}>200/page</option>
+                <option value="500" {% if entries.per_page == 500 %}selected{% endif %}>500/page</option>
+                <option value="1000" {% if entries.per_page == 1000 %}selected{% endif %}>1000/page</option>
+                <option value="5000" {% if entries.per_page == 5000 %}selected{% endif %}>5000/page</option>
+                <option value="99999" {% if entries.per_page >= 10000 %}selected{% endif %}>All</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="log-entries wrap-text" id="logEntries">
+        {% set prev_timestamp = None %}
+        {% for entry in entries.items %}
+        {% set service_index = services.index(entry.service) if entry.service in services else 0 %}
+        <div class="log-entry service-color-{{ service_index % 6 }} severity-{{ (entry.severity or 'info')|lower }}"
+             data-line="{{ entry.line_number }}"
+             data-timestamp="{{ entry.timestamp.isoformat() if entry.timestamp else '' }}"
+             data-raw="{{ entry.raw_content|e }}"
+             data-severity="{{ entry.severity or 'DEBUG' }}"
+             onclick="selectLogEntry(this, event)">
+            <span class="line-num">{{ entry.line_number }}</span>
+            <span class="time-diff" style="display: none;"></span>
+            <span class="timestamp">{{ entry.timestamp.strftime('%H:%M:%S.%f')[:-3] if entry.timestamp else '' }}</span>
+            <span class="severity-badge">
+                {% if entry.severity == 'CRITICAL' %}
+                <span class="badge badge-critical">CRIT</span>
+                {% elif entry.severity == 'ERROR' %}
+                <span class="badge badge-error">ERR</span>
+                {% elif entry.severity == 'WARNING' %}
+                <span class="badge badge-warning">WARN</span>
+                {% elif entry.severity == 'INFO' %}
+                <span class="badge badge-info">INFO</span>
+                {% else %}
+                <span class="badge badge-debug">DBG</span>
+                {% endif %}
+            </span>
+            <span class="service">
+                <span class="badge" style="background: var(--text-muted); font-size: 0.7rem;">{{ entry.service or '-' }}</span>
+            </span>
+            <span class="raw-content">{{ entry.raw_content }}</span>
+            <div class="entry-actions">
+                <button class="entry-action-btn" onclick="copyLine(this, event)" title="Copy"><i class="bi bi-clipboard"></i></button>
+                <button class="entry-action-btn" onclick="toggleBookmark({{ entry.line_number }}, event)" title="Bookmark"><i class="bi bi-bookmark"></i></button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination-container">
+        <div>
+            {% if entries.has_prev %}
+            <a href="{{ url_for('main.view_log', file_id=log_file.id, page=1, severity=current_severity, service=current_service, search=search, per_page=entries.per_page) }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-chevron-double-left"></i>
+            </a>
+            <a href="{{ url_for('main.view_log', file_id=log_file.id, page=entries.prev_num, severity=current_severity, service=current_service, search=search, per_page=entries.per_page) }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-chevron-left"></i> Prev
+            </a>
+            {% endif %}
+        </div>
+
+        <span class="text-muted" style="font-size: 0.9rem;">
+            Page {{ entries.page }} of {{ entries.pages }}
+        </span>
+
+        <div>
+            {% if entries.has_next %}
+            <a href="{{ url_for('main.view_log', file_id=log_file.id, page=entries.next_num, severity=current_severity, service=current_service, search=search, per_page=entries.per_page) }}" class="btn btn-sm btn-outline-secondary">
+                Next <i class="bi bi-chevron-right"></i>
+            </a>
+            <a href="{{ url_for('main.view_log', file_id=log_file.id, page=entries.pages, severity=current_severity, service=current_service, search=search, per_page=entries.per_page) }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-chevron-double-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Minimap -->
 <div class="minimap-container" id="minimapContainer">
     <div class="minimap-header" onclick="toggleMinimap()">
-        <span><i class="bi bi-map me-1"></i>Minimap</span>
-        <i class="bi bi-chevron-right"></i>
+        <span><i class="bi bi-map me-1"></i>Map</span>
+        <i class="bi bi-chevron-down" id="minimapChevron"></i>
     </div>
-    <div class="minimap-canvas-container">
-        <canvas class="minimap-canvas" id="minimapCanvas"></canvas>
-        <div class="minimap-viewport" id="minimapViewport"></div>
-        <div class="minimap-tooltip" id="minimapTooltip">Line 0</div>
-    </div>
+    <canvas class="minimap-canvas" id="minimapCanvas"></canvas>
+    <div class="minimap-viewport" id="minimapViewport"></div>
     <div class="minimap-stats">
         <div class="minimap-stat errors">
             <span class="count">{{ log_file.error_count }}</span>
-            <span class="label">Errors</span>
+            <span style="font-size: 0.6rem; color: var(--text-muted);">ERR</span>
         </div>
         <div class="minimap-stat warnings">
             <span class="count">{{ log_file.warning_count }}</span>
-            <span class="label">Warns</span>
+            <span style="font-size: 0.6rem; color: var(--text-muted);">WARN</span>
         </div>
     </div>
+</div>
+
+<!-- Bookmarks Panel -->
+<div class="bookmarks-panel" id="bookmarksPanel">
+    <div class="bookmarks-panel-header">
+        <span><i class="bi bi-bookmark me-2"></i>Bookmarks</span>
+        <button class="btn btn-sm btn-link p-0" onclick="clearBookmarks()">Clear</button>
+    </div>
+    <div class="bookmarks-list" id="bookmarksList">
+        <div class="text-center text-muted p-3" style="font-size: 0.85rem;">
+            Click <i class="bi bi-bookmark"></i> to add bookmarks
+        </div>
+    </div>
+</div>
+
+<!-- Copy Toast -->
+<div class="copy-toast" id="copyToast">
+    <i class="bi bi-check-circle me-2"></i><span id="copyToastText">Copied!</span>
 </div>
 
 <!-- Jump to Line Modal -->
@@ -627,368 +1076,1092 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <input type="number" class="form-control jump-to-line-input" id="jumpLineInput"
+                <input type="number" class="form-control" id="jumpLineInput" style="font-size: 1.5rem; text-align: center;"
                        min="1" max="{{ log_file.total_lines }}" placeholder="Line #">
-                <small class="text-muted d-block mt-2 text-center">Press Enter to jump (1 - {{ log_file.total_lines }})</small>
+                <small class="text-muted d-block mt-2 text-center">1 - {{ log_file.total_lines }}</small>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-primary" onclick="jumpToLine()">
-                    <i class="bi bi-arrow-right me-1"></i>Go
-                </button>
+                <button type="button" class="btn btn-primary" onclick="jumpToLine()">Go</button>
             </div>
         </div>
     </div>
 </div>
 
+{% endblock %}
+
 {% block extra_js %}
 <script>
 // ============================================
-// Minimap Data & Configuration
+// State & Configuration
 // ============================================
-const minimapData = {
+const viewerState = {
+    fileId: {{ log_file.id }},
     totalLines: {{ log_file.total_lines }},
-    errorCount: {{ log_file.error_count }},
-    warningCount: {{ log_file.warning_count }},
     currentPage: {{ entries.page }},
     perPage: {{ entries.per_page }},
     totalPages: {{ entries.pages }},
-    fileId: {{ log_file.id }}
+    searchMode: '{{ search_mode or "contains" }}',
+    searchAction: '{{ search_action or "filter" }}',
+    search: '{{ search or "" }}',
+    showLineNumbers: true,
+    showTimestamps: true,
+    showTimeDiff: false,
+    wrapText: true,
+    fontSize: 14,
+    bookmarks: JSON.parse(localStorage.getItem('bookmarks_{{ log_file.id }}') || '[]'),
+    matches: [],
+    currentMatchIndex: 0
 };
 
-let minimapLoaded = false;
-let minimapEntries = [];
+// ============================================
+// Copy Functions
+// ============================================
+let selectedEntries = new Set();
 
-// Toggle minimap collapse
-function toggleMinimap() {
-    const container = document.getElementById('minimapContainer');
-    container.classList.toggle('collapsed');
-    localStorage.setItem('minimapCollapsed', container.classList.contains('collapsed'));
+function showCopyToast(message) {
+    const toast = document.getElementById('copyToast');
+    document.getElementById('copyToastText').textContent = message;
+    toast.style.display = 'block';
+    setTimeout(() => toast.style.display = 'none', 2000);
 }
 
-// Initialize minimap
-async function initMinimap() {
-    const container = document.getElementById('minimapContainer');
-    const canvas = document.getElementById('minimapCanvas');
-    const ctx = canvas.getContext('2d');
-    const viewport = document.getElementById('minimapViewport');
-    const tooltip = document.getElementById('minimapTooltip');
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showCopyToast('Copied to clipboard!');
+    });
+}
 
-    // Check saved collapse state
-    if (localStorage.getItem('minimapCollapsed') === 'true') {
-        container.classList.add('collapsed');
+function copyLine(btn, event) {
+    event.stopPropagation();
+    const entry = btn.closest('.log-entry');
+    copyToClipboard(entry.dataset.raw);
+}
+
+function copyFilteredLogs() {
+    const entries = document.querySelectorAll('.log-entry');
+    const lines = Array.from(entries).map(e => e.dataset.raw);
+    copyToClipboard(lines.join('\n'));
+    showCopyToast(`Copied ${lines.length} lines!`);
+}
+
+function copySelectedEntries() {
+    if (selectedEntries.size === 0) return;
+    const lines = [];
+    document.querySelectorAll('.log-entry.selected').forEach(e => lines.push(e.dataset.raw));
+    copyToClipboard(lines.join('\n'));
+    showCopyToast(`Copied ${lines.length} lines!`);
+}
+
+// ============================================
+// Selection
+// ============================================
+function selectLogEntry(entry, event) {
+    if (event.target.closest('.entry-actions')) return;
+
+    if (event.shiftKey && selectedEntries.size > 0) {
+        const entries = Array.from(document.querySelectorAll('.log-entry'));
+        const lastSelected = entries.find(e => selectedEntries.has(e.dataset.line));
+        if (lastSelected) {
+            const startIdx = entries.indexOf(lastSelected);
+            const endIdx = entries.indexOf(entry);
+            const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+            for (let i = from; i <= to; i++) {
+                entries[i].classList.add('selected');
+                selectedEntries.add(entries[i].dataset.line);
+            }
+        }
+    } else if (event.ctrlKey || event.metaKey) {
+        entry.classList.toggle('selected');
+        if (entry.classList.contains('selected')) {
+            selectedEntries.add(entry.dataset.line);
+        } else {
+            selectedEntries.delete(entry.dataset.line);
+        }
+    } else {
+        document.querySelectorAll('.log-entry.selected').forEach(e => e.classList.remove('selected'));
+        selectedEntries.clear();
+        entry.classList.add('selected');
+        selectedEntries.add(entry.dataset.line);
+    }
+}
+
+// ============================================
+// Export Functions
+// ============================================
+function exportLogs(format) {
+    const entries = document.querySelectorAll('.log-entry');
+    const lines = Array.from(entries).map(e => {
+        if (format === 'json') {
+            return { line: parseInt(e.dataset.line), content: e.dataset.raw, severity: e.dataset.severity };
+        }
+        return e.dataset.raw;
+    });
+
+    let content, filename, type;
+    if (format === 'json') {
+        content = JSON.stringify(lines, null, 2);
+        filename = '{{ log_file.original_filename }}_filtered.json';
+        type = 'application/json';
+    } else {
+        content = lines.join('\n');
+        filename = '{{ log_file.original_filename }}_filtered.txt';
+        type = 'text/plain';
     }
 
-    // Set canvas size
+    const blob = new Blob([content], { type });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    showCopyToast(`Exported ${lines.length} lines`);
+}
+
+window.copyFilteredLogs = copyFilteredLogs;
+window.exportLogs = exportLogs;
+
+// ============================================
+// Search Functions
+// ============================================
+function performSearch() {
+    const query = document.getElementById('searchInput').value.trim();
+    const mode = viewerState.searchMode;
+    const action = viewerState.searchAction;
+
+    if (action === 'filter') {
+        // Server-side filtering
+        const params = new URLSearchParams(window.location.search);
+        if (query) {
+            params.set('search', query);
+            params.set('search_mode', mode);
+            params.set('search_action', 'filter');
+        } else {
+            params.delete('search');
+            params.delete('search_mode');
+            params.delete('search_action');
+        }
+        params.delete('page');
+        window.location.href = window.location.pathname + '?' + params.toString();
+    } else {
+        // Client-side highlighting
+        highlightMatches(query, mode);
+    }
+}
+
+function highlightMatches(query, mode) {
+    viewerState.matches = [];
+    viewerState.currentMatchIndex = 0;
+
+    const entries = document.querySelectorAll('.log-entry');
+
+    entries.forEach(entry => {
+        const contentEl = entry.querySelector('.raw-content');
+        const raw = entry.dataset.raw;
+
+        if (!raw || !contentEl) return;
+
+        // Reset content to original
+        contentEl.textContent = raw;
+        entry.classList.remove('current-match');
+
+        if (!query) return;
+
+        let regex;
+        try {
+            if (mode === 'regex') {
+                regex = new RegExp(query, 'gi');
+            } else if (mode === 'exact') {
+                regex = new RegExp(escapeRegex(query), 'g');
+            } else {
+                regex = new RegExp(escapeRegex(query), 'gi');
+            }
+        } catch (e) {
+            console.error('Invalid regex:', e);
+            return;
+        }
+
+        const matches = [...raw.matchAll(regex)];
+        if (matches.length > 0) {
+            let highlighted = '';
+            let lastIndex = 0;
+            matches.forEach((match, idx) => {
+                highlighted += escapeHtml(raw.slice(lastIndex, match.index));
+                highlighted += `<mark data-match-idx="${viewerState.matches.length}">${escapeHtml(match[0])}</mark>`;
+                viewerState.matches.push({ entry, matchIdx: idx, lineNum: parseInt(entry.dataset.line) });
+                lastIndex = match.index + match[0].length;
+            });
+            highlighted += escapeHtml(raw.slice(lastIndex));
+            contentEl.innerHTML = highlighted;
+        }
+    });
+
+    updateMatchNav();
+    updateMinimapWithMatches();
+
+    if (viewerState.matches.length > 0) {
+        goToMatch(0);
+        showCopyToast(`Found ${viewerState.matches.length} matches on this page`);
+    } else if (query) {
+        showCopyToast('No matches on this page');
+        // Also search ALL entries via API
+        searchAllEntries(query, mode);
+    }
+}
+
+// Search ALL entries in the log file via API
+async function searchAllEntries(query, mode) {
+    try {
+        const response = await fetch(`/api/log-files/${viewerState.fileId}/search?q=${encodeURIComponent(query)}&mode=${mode}`);
+        const data = await response.json();
+
+        if (data.matches && data.matches.length > 0) {
+            viewerState.allMatches = data.matches; // Store all match line numbers
+            updateMinimapWithAllMatches(data.matches);
+            showCopyToast(`Found ${data.total} matches across all ${viewerState.totalLines} lines. See minimap.`);
+        } else {
+            showCopyToast('No matches found in entire log');
+        }
+    } catch (e) {
+        console.error('Search API error:', e);
+    }
+}
+
+// Update minimap to show search matches (yellow)
+function updateMinimapWithMatches() {
+    const canvas = document.getElementById('minimapCanvas');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
     const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * 2; // For retina
+
+    // Redraw base minimap first
+    initMinimap();
+
+    if (viewerState.matches.length === 0) return;
+
+    // Draw search matches in yellow on top
+    const totalOnPage = document.querySelectorAll('.log-entry').length;
+    viewerState.matches.forEach(match => {
+        const idx = Array.from(document.querySelectorAll('.log-entry')).indexOf(match.entry);
+        const y = (idx / totalOnPage) * rect.height;
+        ctx.fillStyle = '#fbbf24'; // Yellow
+        ctx.fillRect(0, y, rect.width, 4);
+    });
+
+    // Update match count in minimap stats
+    const statsDiv = document.querySelector('.minimap-stats');
+    if (statsDiv && viewerState.matches.length > 0) {
+        // Add match count if not exists
+        let matchStat = statsDiv.querySelector('.minimap-stat.matches');
+        if (!matchStat) {
+            matchStat = document.createElement('div');
+            matchStat.className = 'minimap-stat matches';
+            matchStat.innerHTML = `<span class="count" style="color: #fbbf24;">${viewerState.matches.length}</span><span style="font-size: 0.6rem; color: var(--text-muted);">MATCH</span>`;
+            statsDiv.appendChild(matchStat);
+        } else {
+            matchStat.querySelector('.count').textContent = viewerState.matches.length;
+        }
+    }
+}
+
+// Update minimap with ALL matches from server (yellow)
+function updateMinimapWithAllMatches(matchLineNumbers) {
+    const canvas = document.getElementById('minimapCanvas');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+
+    canvas.width = rect.width * 2;
     canvas.height = rect.height * 2;
     ctx.scale(2, 2);
 
-    // Fetch minimap data (summary of errors/warnings per line range)
-    try {
-        const response = await fetch(`/api/log-files/${minimapData.fileId}/minimap`);
-        if (response.ok) {
-            const data = await response.json();
-            minimapEntries = data.entries || [];
-            drawMinimap(ctx, canvas, minimapEntries);
-        } else {
-            // Fallback: draw simple representation
-            drawSimpleMinimap(ctx, canvas);
+    // Background
+    ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'dark' ? '#1e293b' : '#f8fafc';
+    ctx.fillRect(0, 0, rect.width, rect.height);
+
+    // Draw ALL matches as yellow lines
+    matchLineNumbers.forEach(lineNum => {
+        const y = (lineNum / viewerState.totalLines) * rect.height;
+        ctx.fillStyle = '#fbbf24'; // Yellow
+        ctx.fillRect(0, y, rect.width, 3);
+    });
+
+    // Update stats
+    const statsDiv = document.querySelector('.minimap-stats');
+    if (statsDiv) {
+        let matchStat = statsDiv.querySelector('.minimap-stat.matches');
+        if (!matchStat) {
+            matchStat = document.createElement('div');
+            matchStat.className = 'minimap-stat matches';
+            statsDiv.appendChild(matchStat);
         }
-    } catch (error) {
-        console.error('Failed to load minimap data:', error);
-        drawSimpleMinimap(ctx, canvas);
+        matchStat.innerHTML = `<span class="count" style="color: #fbbf24;">${matchLineNumbers.length}</span><span style="font-size: 0.6rem; color: var(--text-muted);">MATCH</span>`;
     }
 
-    // Update viewport indicator
-    updateViewport();
-
-    // Canvas click handler - jump to that position
-    canvas.addEventListener('click', function(e) {
-        const rect = canvas.getBoundingClientRect();
-        const y = e.clientY - rect.top;
+    // Update minimap click to jump to match
+    canvas.onclick = function(e) {
+        const y = e.offsetY;
         const percent = y / rect.height;
-        const targetLine = Math.floor(percent * minimapData.totalLines);
-        const targetPage = Math.ceil(targetLine / minimapData.perPage);
-        jumpToPage(targetPage);
-    });
+        const targetLine = Math.floor(percent * viewerState.totalLines);
+        const targetPage = Math.ceil(targetLine / viewerState.perPage);
 
-    // Canvas hover handler - show tooltip
-    canvas.addEventListener('mousemove', function(e) {
-        const rect = canvas.getBoundingClientRect();
-        const y = e.clientY - rect.top;
-        const percent = y / rect.height;
-        const targetLine = Math.floor(percent * minimapData.totalLines) + 1;
-        tooltip.textContent = `Line ${targetLine}`;
-        tooltip.style.top = `${y + 8}px`;
-    });
+        // Navigate to page with the match
+        const params = new URLSearchParams(window.location.search);
+        params.set('page', targetPage);
+        window.location.href = window.location.pathname + '?' + params.toString();
+    };
+}
 
-    // Scroll sync
-    const logContainer = document.getElementById('logEntries');
-    if (logContainer) {
-        logContainer.addEventListener('scroll', updateViewport);
+function updateMatchNav() {
+    const nav = document.getElementById('matchNav');
+    const total = viewerState.matches.length;
+
+    if (total > 0 && viewerState.searchAction === 'highlight') {
+        nav.style.display = 'flex';
+        document.getElementById('totalMatches').textContent = total;
+        document.getElementById('currentMatch').textContent = viewerState.currentMatchIndex + 1;
+    } else {
+        nav.style.display = 'none';
     }
 }
 
-function drawMinimap(ctx, canvas, entries) {
-    const width = canvas.width / 2;
-    const height = canvas.height / 2;
-    const totalLines = minimapData.totalLines;
+function goToMatch(index) {
+    document.querySelectorAll('.log-entry.current-match').forEach(e => e.classList.remove('current-match'));
+    document.querySelectorAll('mark.current').forEach(e => e.classList.remove('current'));
 
-    // Background
-    ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'dark' ? '#1f2937' : '#f9fafb';
-    ctx.fillRect(0, 0, width, height);
+    if (viewerState.matches.length === 0) return;
 
-    // Draw each line as a thin bar
-    if (entries.length === 0) {
-        drawSimpleMinimap(ctx, canvas);
-        return;
+    viewerState.currentMatchIndex = index;
+    const match = viewerState.matches[index];
+    match.entry.classList.add('current-match');
+    match.entry.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    const marks = match.entry.querySelectorAll('mark');
+    if (marks[match.matchIdx]) {
+        marks[match.matchIdx].classList.add('current');
     }
+
+    document.getElementById('currentMatch').textContent = index + 1;
+}
+
+function nextMatch() {
+    if (viewerState.matches.length === 0) return;
+    const next = (viewerState.currentMatchIndex + 1) % viewerState.matches.length;
+    goToMatch(next);
+}
+
+function prevMatch() {
+    if (viewerState.matches.length === 0) return;
+    const prev = (viewerState.currentMatchIndex - 1 + viewerState.matches.length) % viewerState.matches.length;
+    goToMatch(prev);
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function clearSearch() {
+    document.getElementById('searchInput').value = '';
+
+    if (viewerState.searchAction === 'highlight') {
+        // Clear client-side highlighting
+        highlightMatches('', viewerState.searchMode);
+    } else {
+        // Clear server-side filter - reload page without search params
+        const params = new URLSearchParams(window.location.search);
+        params.delete('search');
+        params.delete('search_mode');
+        params.delete('search_action');
+        params.delete('page');
+        window.location.href = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+    }
+}
+
+// ============================================
+// View Controls
+// ============================================
+function toggleWrap() {
+    viewerState.wrapText = !viewerState.wrapText;
+    const container = document.getElementById('logEntries');
+    container.classList.toggle('wrap-text', viewerState.wrapText);
+    container.classList.toggle('no-wrap', !viewerState.wrapText);
+    document.getElementById('btnWrapText').classList.toggle('active', viewerState.wrapText);
+}
+
+function toggleLineNumbers() {
+    viewerState.showLineNumbers = !viewerState.showLineNumbers;
+    document.querySelectorAll('.log-entry .line-num').forEach(el => {
+        el.style.display = viewerState.showLineNumbers ? '' : 'none';
+    });
+    document.getElementById('btnLineNumbers').classList.toggle('active', viewerState.showLineNumbers);
+}
+
+function toggleTimestamps() {
+    viewerState.showTimestamps = !viewerState.showTimestamps;
+    document.querySelectorAll('.log-entry .timestamp').forEach(el => {
+        el.style.display = viewerState.showTimestamps ? '' : 'none';
+    });
+    document.getElementById('btnTimestamps').classList.toggle('active', viewerState.showTimestamps);
+}
+
+function toggleTimeDiff() {
+    viewerState.showTimeDiff = !viewerState.showTimeDiff;
+    calculateTimeDiffs();
+    document.querySelectorAll('.log-entry .time-diff').forEach(el => {
+        el.style.display = viewerState.showTimeDiff ? '' : 'none';
+    });
+    document.getElementById('btnTimeDiff').classList.toggle('active', viewerState.showTimeDiff);
+}
+
+function calculateTimeDiffs() {
+    const entries = document.querySelectorAll('.log-entry');
+    let prevTime = null;
 
     entries.forEach(entry => {
-        const y = (entry.line / totalLines) * height;
-        const lineHeight = Math.max(1, height / totalLines);
+        const ts = entry.dataset.timestamp;
+        const diffEl = entry.querySelector('.time-diff');
 
-        if (entry.severity === 'ERROR' || entry.severity === 'CRITICAL') {
-            ctx.fillStyle = '#ef4444';
-            ctx.fillRect(0, y, width, Math.max(lineHeight, 2));
-        } else if (entry.severity === 'WARNING') {
-            ctx.fillStyle = '#f59e0b';
-            ctx.fillRect(0, y, width, Math.max(lineHeight, 1.5));
-        } else if (entry.severity === 'INFO') {
-            ctx.fillStyle = '#3b82f6';
-            ctx.fillRect(0, y, width * 0.3, Math.max(lineHeight, 1));
+        if (!ts || !diffEl) return;
+
+        const currentTime = new Date(ts);
+        if (prevTime) {
+            const diffMs = currentTime - prevTime;
+            if (diffMs > 1000) {
+                diffEl.textContent = `+${(diffMs/1000).toFixed(1)}s`;
+                diffEl.className = 'time-diff ' + (diffMs > 5000 ? 'very-slow' : (diffMs > 1000 ? 'slow' : ''));
+            } else {
+                diffEl.textContent = `+${diffMs}ms`;
+                diffEl.className = 'time-diff';
+            }
+        } else {
+            diffEl.textContent = '-';
         }
+        prevTime = currentTime;
     });
-
-    minimapLoaded = true;
 }
 
-function drawSimpleMinimap(ctx, canvas) {
-    const width = canvas.width / 2;
-    const height = canvas.height / 2;
-    const totalLines = minimapData.totalLines;
+function increaseFontSize() {
+    viewerState.fontSize = Math.min(viewerState.fontSize + 1, 24);
+    applyFontSize();
+}
 
-    // Background
-    ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'dark' ? '#1f2937' : '#f9fafb';
-    ctx.fillRect(0, 0, width, height);
+function decreaseFontSize() {
+    viewerState.fontSize = Math.max(viewerState.fontSize - 1, 10);
+    applyFontSize();
+}
 
-    // Draw approximation based on counts
-    const errorDensity = minimapData.errorCount / totalLines;
-    const warningDensity = minimapData.warningCount / totalLines;
+function applyFontSize() {
+    document.getElementById('logEntries').style.fontSize = viewerState.fontSize + 'px';
+    document.getElementById('fontSizeDisplay').textContent = viewerState.fontSize;
+}
 
-    // Simulate random distribution of errors/warnings
-    for (let i = 0; i < minimapData.errorCount && i < 100; i++) {
-        const y = Math.random() * height;
-        ctx.fillStyle = '#ef4444';
-        ctx.fillRect(0, y, width, 2);
+// ============================================
+// Bookmarks
+// ============================================
+function toggleBookmark(lineNum, event) {
+    if (event) event.stopPropagation();
+
+    const idx = viewerState.bookmarks.indexOf(lineNum);
+    if (idx > -1) {
+        viewerState.bookmarks.splice(idx, 1);
+    } else {
+        viewerState.bookmarks.push(lineNum);
     }
 
-    for (let i = 0; i < minimapData.warningCount && i < 100; i++) {
-        const y = Math.random() * height;
-        ctx.fillStyle = '#f59e0b';
-        ctx.fillRect(0, y, width, 1.5);
-    }
-
-    minimapLoaded = true;
+    saveBookmarks();
+    renderBookmarks();
 }
 
-function updateViewport() {
-    const viewport = document.getElementById('minimapViewport');
-    const canvas = document.getElementById('minimapCanvas');
-    if (!viewport || !canvas) return;
+function saveBookmarks() {
+    localStorage.setItem('bookmarks_{{ log_file.id }}', JSON.stringify(viewerState.bookmarks));
+    document.getElementById('bookmarkCount').textContent = viewerState.bookmarks.length;
 
-    const canvasHeight = canvas.getBoundingClientRect().height;
-    const totalPages = minimapData.totalPages;
-    const currentPage = minimapData.currentPage;
-
-    // Calculate viewport position and size
-    const viewportHeight = Math.max(canvasHeight / totalPages, 20);
-    const viewportTop = ((currentPage - 1) / totalPages) * canvasHeight + 8;
-
-    viewport.style.top = `${viewportTop}px`;
-    viewport.style.height = `${viewportHeight}px`;
+    document.querySelectorAll('.log-entry').forEach(entry => {
+        const lineNum = parseInt(entry.dataset.line);
+        entry.classList.toggle('bookmarked', viewerState.bookmarks.includes(lineNum));
+    });
 }
 
-function jumpToPage(page) {
-    page = Math.max(1, Math.min(page, minimapData.totalPages));
-    const params = new URLSearchParams(window.location.search);
-    params.set('page', page);
-    window.location.href = window.location.pathname + '?' + params.toString();
-}
-
-function jumpToLine() {
-    const input = document.getElementById('jumpLineInput');
-    const line = parseInt(input.value);
-    if (isNaN(line) || line < 1 || line > minimapData.totalLines) {
-        input.classList.add('is-invalid');
+function renderBookmarks() {
+    const list = document.getElementById('bookmarksList');
+    if (viewerState.bookmarks.length === 0) {
+        list.innerHTML = '<div class="text-center text-muted p-3" style="font-size: 0.85rem;">No bookmarks yet</div>';
         return;
     }
-    const targetPage = Math.ceil(line / minimapData.perPage);
-    jumpToPage(targetPage);
+
+    list.innerHTML = viewerState.bookmarks.sort((a,b) => a-b).map(lineNum => {
+        const entry = document.querySelector(`.log-entry[data-line="${lineNum}"]`);
+        const preview = entry ? entry.dataset.raw.substring(0, 50) + '...' : '';
+        return `
+            <div class="bookmark-item" onclick="goToLine(${lineNum})">
+                <div class="line-num">Line ${lineNum}</div>
+                <div class="preview">${escapeHtml(preview)}</div>
+            </div>
+        `;
+    }).join('');
 }
 
-// Initialize on load
-document.addEventListener('DOMContentLoaded', initMinimap);
+function clearBookmarks() {
+    viewerState.bookmarks = [];
+    saveBookmarks();
+    renderBookmarks();
+}
 
-// Filter functions
+function toggleBookmarksPanel() {
+    document.getElementById('bookmarksPanel').classList.toggle('visible');
+}
+
+// ============================================
+// Navigation & Filtering
+// ============================================
 function filterByService(service) {
     const params = new URLSearchParams(window.location.search);
-    if (service) {
-        params.set('service', service);
-    } else {
-        params.delete('service');
-    }
-    params.delete('page'); // Reset to page 1
+    if (service) params.set('service', service);
+    else params.delete('service');
+    params.delete('page');
     window.location.href = window.location.pathname + '?' + params.toString();
 }
 
 function filterBySeverity(severity) {
     const params = new URLSearchParams(window.location.search);
-    if (severity) {
-        params.set('severity', severity);
-    } else {
-        params.delete('severity');
-    }
-    params.delete('page'); // Reset to page 1
+    if (severity) params.set('severity', severity);
+    else params.delete('severity');
+    params.delete('page');
     window.location.href = window.location.pathname + '?' + params.toString();
 }
 
-// Toggle functions
-let showTimestamps = true;
-let showLineNumbers = true;
+function changePerPage(value) {
+    const params = new URLSearchParams(window.location.search);
+    params.set('per_page', value);
+    params.delete('page');
+    window.location.href = window.location.pathname + '?' + params.toString();
+}
 
-function toggleTimestamps() {
-    showTimestamps = !showTimestamps;
-    document.querySelectorAll('.log-entry .timestamp').forEach(el => {
-        el.style.display = showTimestamps ? '' : 'none';
+function jumpToPage(page) {
+    const params = new URLSearchParams(window.location.search);
+    params.set('page', Math.max(1, Math.min(page, viewerState.totalPages)));
+    window.location.href = window.location.pathname + '?' + params.toString();
+}
+
+function jumpToLine() {
+    const line = parseInt(document.getElementById('jumpLineInput').value);
+    if (isNaN(line) || line < 1 || line > viewerState.totalLines) return;
+    const targetPage = Math.ceil(line / viewerState.perPage);
+    jumpToPage(targetPage);
+}
+
+function goToLine(lineNum) {
+    const entry = document.querySelector(`.log-entry[data-line="${lineNum}"]`);
+    if (entry) {
+        entry.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        entry.classList.add('selected');
+        selectedEntries.add(lineNum.toString());
+    } else {
+        const targetPage = Math.ceil(lineNum / viewerState.perPage);
+        jumpToPage(targetPage);
+    }
+}
+
+// ============================================
+// Minimap
+// ============================================
+function toggleMinimap() {
+    const container = document.getElementById('minimapContainer');
+    container.classList.toggle('collapsed');
+    document.getElementById('minimapChevron').classList.toggle('bi-chevron-down');
+    document.getElementById('minimapChevron').classList.toggle('bi-chevron-right');
+}
+
+// Make minimap draggable
+function initMinimapDrag() {
+    const container = document.getElementById('minimapContainer');
+    if (!container) return;
+
+    let isDragging = false;
+    let startX, startY, startLeft, startTop;
+
+    container.addEventListener('mousedown', function(e) {
+        // Only drag from header area
+        if (!e.target.closest('.minimap-header')) return;
+
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+
+        const rect = container.getBoundingClientRect();
+        startLeft = rect.left;
+        startTop = rect.top;
+
+        container.style.cursor = 'grabbing';
+        e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+
+        container.style.left = (startLeft + dx) + 'px';
+        container.style.top = (startTop + dy) + 'px';
+        container.style.right = 'auto';
+    });
+
+    document.addEventListener('mouseup', function() {
+        if (isDragging) {
+            isDragging = false;
+            container.style.cursor = 'move';
+        }
     });
 }
 
-function toggleLineNumbers() {
-    showLineNumbers = !showLineNumbers;
-    document.querySelectorAll('.log-entry .line-num').forEach(el => {
-        el.style.display = showLineNumbers ? '' : 'none';
+function initMinimap() {
+    const canvas = document.getElementById('minimapCanvas');
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+
+    canvas.width = rect.width * 2;
+    canvas.height = rect.height * 2;
+    ctx.scale(2, 2);
+
+    // Draw background
+    ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'dark' ? '#1e293b' : '#f8fafc';
+    ctx.fillRect(0, 0, rect.width, rect.height);
+
+    // Draw entries from current page
+    document.querySelectorAll('.log-entry').forEach((entry, idx) => {
+        const severity = entry.dataset.severity;
+        const y = (idx / document.querySelectorAll('.log-entry').length) * rect.height;
+
+        if (severity === 'ERROR' || severity === 'CRITICAL') {
+            ctx.fillStyle = '#ef4444';
+            ctx.fillRect(0, y, rect.width, 2);
+        } else if (severity === 'WARNING') {
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(0, y, rect.width, 1.5);
+        }
     });
+
+    // Click to scroll
+    canvas.onclick = function(e) {
+        const y = e.offsetY;
+        const percent = y / rect.height;
+        const entries = document.querySelectorAll('.log-entry');
+        const targetIdx = Math.floor(percent * entries.length);
+        if (entries[targetIdx]) {
+            entries[targetIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    };
 }
 
-// Keyboard shortcuts
+// ============================================
+// Keyboard Shortcuts
+// ============================================
 document.addEventListener('keydown', function(e) {
-    const isTyping = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
+    const isTyping = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
 
-    // Press 'e' to filter errors
-    if (e.key === 'e' && !e.ctrlKey && !e.metaKey && !isTyping) {
-        filterBySeverity('ERROR');
+    // Search input specific
+    if (document.activeElement.id === 'searchInput') {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (e.shiftKey) prevMatch();
+            else if (viewerState.searchAction === 'highlight' && viewerState.matches.length > 0) nextMatch();
+            else performSearch();
+        }
+        if (e.key === 'Escape') {
+            document.getElementById('searchInput').blur();
+            document.getElementById('searchInput').value = '';
+            highlightMatches('', viewerState.searchMode);
+        }
+        return;
     }
-    // Press 'w' to filter warnings
-    if (e.key === 'w' && !e.ctrlKey && !e.metaKey && !isTyping) {
-        filterBySeverity('WARNING');
+
+    if (isTyping) return;
+
+    // Global shortcuts
+    if (e.key === '/') { e.preventDefault(); document.getElementById('searchInput').focus(); }
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.log-entry.selected').forEach(e => e.classList.remove('selected'));
+        selectedEntries.clear();
     }
-    // Press 'a' to show all
-    if (e.key === 'a' && !e.ctrlKey && !e.metaKey && !isTyping) {
-        filterBySeverity('');
-    }
-    // Press '/' to focus search
-    if (e.key === '/' && !isTyping) {
+    if (e.key === 'c' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); copySelectedEntries(); }
+    if (e.key === 'C' && e.shiftKey) { e.preventDefault(); copyFilteredLogs(); }
+    if (e.key === 'e') filterBySeverity('ERROR');
+    if (e.key === 'w') filterBySeverity('WARNING');
+    if (e.key === 'a') filterBySeverity('');
+    if (e.key === 'g') {
         e.preventDefault();
-        document.getElementById('search').focus();
-    }
-    // Press 'g' to open jump to line modal
-    if (e.key === 'g' && !e.ctrlKey && !e.metaKey && !isTyping) {
-        e.preventDefault();
-        const modal = new bootstrap.Modal(document.getElementById('jumpToLineModal'));
-        modal.show();
+        new bootstrap.Modal(document.getElementById('jumpToLineModal')).show();
         setTimeout(() => document.getElementById('jumpLineInput').focus(), 100);
     }
-    // Press 'm' to toggle minimap
-    if (e.key === 'm' && !e.ctrlKey && !e.metaKey && !isTyping) {
-        e.preventDefault();
-        toggleMinimap();
-    }
-    // Press 'n' for next page
-    if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !isTyping) {
-        e.preventDefault();
-        if (minimapData.currentPage < minimapData.totalPages) {
-            jumpToPage(minimapData.currentPage + 1);
-        }
-    }
-    // Press 'p' for previous page
-    if (e.key === 'p' && !e.ctrlKey && !e.metaKey && !isTyping) {
-        e.preventDefault();
-        if (minimapData.currentPage > 1) {
-            jumpToPage(minimapData.currentPage - 1);
-        }
-    }
-    // Press '?' for keyboard shortcuts help
-    if (e.key === '?' && !isTyping) {
-        e.preventDefault();
-        showLogViewerShortcuts();
-    }
+    if (e.key === 'b' || e.key === 'B') { e.preventDefault(); toggleBookmarksPanel(); }
+    if (e.key === 'm') { e.preventDefault(); toggleMinimap(); }
+    if (e.key === 'n') { e.preventDefault(); if (viewerState.currentPage < viewerState.totalPages) jumpToPage(viewerState.currentPage + 1); }
+    if (e.key === 'p') { e.preventDefault(); if (viewerState.currentPage > 1) jumpToPage(viewerState.currentPage - 1); }
+    if (e.key === '?') { e.preventDefault(); showShortcutsHelp(); }
+    if (e.key === 'z' && e.altKey) { e.preventDefault(); toggleWrap(); }
 });
 
-// Enter key in jump to line input
-document.getElementById('jumpLineInput')?.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
-        e.preventDefault();
-        jumpToLine();
-    }
-});
-
-// Show keyboard shortcuts help
-function showLogViewerShortcuts() {
-    const helpHtml = `
-        <div class="modal fade" id="logViewerShortcutsModal" tabindex="-1">
+function showShortcutsHelp() {
+    const html = `
+        <div class="modal fade" id="shortcutsModal" tabindex="-1">
             <div class="modal-dialog">
                 <div class="modal-content">
-                    <div class="modal-header bg-primary text-white">
-                        <h5 class="modal-title"><i class="bi bi-keyboard me-2"></i>Keyboard Shortcuts</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                    </div>
+                    <div class="modal-header"><h5 class="modal-title">Keyboard Shortcuts</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                     <div class="modal-body">
-                        <table class="table table-sm">
-                            <thead><tr><th>Key</th><th>Action</th></tr></thead>
-                            <tbody>
-                                <tr><td><kbd>e</kbd></td><td>Show errors only</td></tr>
-                                <tr><td><kbd>w</kbd></td><td>Show warnings only</td></tr>
-                                <tr><td><kbd>a</kbd></td><td>Show all entries</td></tr>
-                                <tr><td><kbd>/</kbd></td><td>Focus search box</td></tr>
-                                <tr><td><kbd>g</kbd></td><td>Jump to line number</td></tr>
-                                <tr><td><kbd>m</kbd></td><td>Toggle minimap</td></tr>
-                                <tr><td><kbd>n</kbd></td><td>Next page</td></tr>
-                                <tr><td><kbd>p</kbd></td><td>Previous page</td></tr>
-                                <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
-                            </tbody>
-                        </table>
+                        <div class="row">
+                            <div class="col-6">
+                                <h6>Navigation</h6>
+                                <table class="table table-sm"><tbody>
+                                    <tr><td><kbd>/</kbd></td><td>Focus search</td></tr>
+                                    <tr><td><kbd>g</kbd></td><td>Go to line</td></tr>
+                                    <tr><td><kbd>n</kbd></td><td>Next page</td></tr>
+                                    <tr><td><kbd>p</kbd></td><td>Previous page</td></tr>
+                                    <tr><td><kbd>Enter</kbd></td><td>Next match</td></tr>
+                                    <tr><td><kbd>Shift+Enter</kbd></td><td>Previous match</td></tr>
+                                </tbody></table>
+                            </div>
+                            <div class="col-6">
+                                <h6>Filtering</h6>
+                                <table class="table table-sm"><tbody>
+                                    <tr><td><kbd>e</kbd></td><td>Errors only</td></tr>
+                                    <tr><td><kbd>w</kbd></td><td>Warnings only</td></tr>
+                                    <tr><td><kbd>a</kbd></td><td>Show all</td></tr>
+                                </tbody></table>
+                                <h6>Actions</h6>
+                                <table class="table table-sm"><tbody>
+                                    <tr><td><kbd>c</kbd></td><td>Copy selected</td></tr>
+                                    <tr><td><kbd>Shift+C</kbd></td><td>Copy all visible</td></tr>
+                                    <tr><td><kbd>b</kbd></td><td>Bookmarks panel</td></tr>
+                                    <tr><td><kbd>m</kbd></td><td>Toggle minimap</td></tr>
+                                    <tr><td><kbd>Alt+Z</kbd></td><td>Toggle wrap</td></tr>
+                                </tbody></table>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     `;
-
-    const existing = document.getElementById('logViewerShortcutsModal');
-    if (existing) existing.remove();
-
-    document.body.insertAdjacentHTML('beforeend', helpHtml);
-    const modal = new bootstrap.Modal(document.getElementById('logViewerShortcutsModal'));
-    modal.show();
+    document.getElementById('shortcutsModal')?.remove();
+    document.body.insertAdjacentHTML('beforeend', html);
+    new bootstrap.Modal(document.getElementById('shortcutsModal')).show();
 }
 
-// Highlight search term if present
-{% if search %}
-document.addEventListener('DOMContentLoaded', function() {
-    const searchTerm = '{{ search }}'.toLowerCase();
-    document.querySelectorAll('.raw-content').forEach(el => {
-        const text = el.textContent;
-        const lowerText = text.toLowerCase();
-        const index = lowerText.indexOf(searchTerm);
-        if (index !== -1) {
-            const before = text.substring(0, index);
-            const match = text.substring(index, index + searchTerm.length);
-            const after = text.substring(index + searchTerm.length);
-            el.innerHTML = before + '<mark class="bg-warning">' + match + '</mark>' + after;
+// ============================================
+// Time Range Filter
+// ============================================
+function setTimePreset(preset) {
+    // Update active state
+    document.querySelectorAll('.time-preset-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+
+    const now = new Date();
+    let fromDate = null;
+
+    if (preset === '1h') {
+        fromDate = new Date(now.getTime() - 60 * 60 * 1000);
+    } else if (preset === '6h') {
+        fromDate = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+    } else if (preset === '24h') {
+        fromDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    } else {
+        // 'all' - clear filter
+        document.getElementById('timeFrom').value = '';
+        document.getElementById('timeTo').value = '';
+        filterByTimeRange(null, null);
+        return;
+    }
+
+    // Set the datetime inputs
+    document.getElementById('timeFrom').value = formatDateTimeLocal(fromDate);
+    document.getElementById('timeTo').value = formatDateTimeLocal(now);
+
+    filterByTimeRange(fromDate, now);
+}
+
+function applyTimeFilter() {
+    const fromStr = document.getElementById('timeFrom').value;
+    const toStr = document.getElementById('timeTo').value;
+
+    const from = fromStr ? new Date(fromStr) : null;
+    const to = toStr ? new Date(toStr) : null;
+
+    // Clear preset active states
+    document.querySelectorAll('.time-preset-btn').forEach(btn => btn.classList.remove('active'));
+
+    filterByTimeRange(from, to);
+}
+
+function clearTimeFilter() {
+    document.getElementById('timeFrom').value = '';
+    document.getElementById('timeTo').value = '';
+    document.querySelectorAll('.time-preset-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('presetAll').classList.add('active');
+    filterByTimeRange(null, null);
+}
+
+function filterByTimeRange(from, to) {
+    const entries = document.querySelectorAll('.log-entry');
+    let visibleCount = 0;
+
+    entries.forEach(entry => {
+        const timestampStr = entry.dataset.timestamp;
+
+        if (!from && !to) {
+            // No filter - show all
+            entry.style.display = '';
+            visibleCount++;
+            return;
+        }
+
+        if (!timestampStr) {
+            // No timestamp - hide if filtering
+            entry.style.display = 'none';
+            return;
+        }
+
+        const entryTime = new Date(timestampStr);
+        let show = true;
+
+        if (from && entryTime < from) show = false;
+        if (to && entryTime > to) show = false;
+
+        entry.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+    });
+
+    // Update stats
+    showCopyToast(`Showing ${visibleCount} of ${entries.length} entries`);
+}
+
+function formatDateTimeLocal(date) {
+    const pad = n => n.toString().padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// ============================================
+// Error Timeline Chart
+// ============================================
+function initErrorTimeline() {
+    const canvas = document.getElementById('errorTimelineChart');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const entries = document.querySelectorAll('.log-entry');
+    const rect = canvas.getBoundingClientRect();
+
+    canvas.width = rect.width * 2;
+    canvas.height = rect.height * 2;
+    ctx.scale(2, 2);
+
+    // Collect timestamps and severities
+    const dataPoints = [];
+    let minTime = null, maxTime = null;
+
+    entries.forEach(entry => {
+        const ts = entry.dataset.timestamp;
+        const severity = entry.dataset.severity;
+
+        if (ts && (severity === 'ERROR' || severity === 'CRITICAL' || severity === 'WARNING')) {
+            const time = new Date(ts);
+            dataPoints.push({ time, severity });
+            if (!minTime || time < minTime) minTime = time;
+            if (!maxTime || time > maxTime) maxTime = time;
         }
     });
+
+    if (dataPoints.length === 0 || !minTime || !maxTime) {
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '11px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText('No errors in visible range', rect.width / 2, rect.height / 2);
+        return;
+    }
+
+    // Update timeline range label
+    const rangeLabel = document.getElementById('timelineRange');
+    if (rangeLabel) {
+        const formatTime = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        rangeLabel.textContent = `${formatTime(minTime)} - ${formatTime(maxTime)}`;
+    }
+
+    // Create buckets (divide timeline into 50 buckets)
+    const buckets = 50;
+    const timeRange = maxTime - minTime || 1;
+    const bucketData = Array(buckets).fill(0).map(() => ({ errors: 0, warnings: 0 }));
+
+    dataPoints.forEach(point => {
+        const bucketIdx = Math.min(Math.floor((point.time - minTime) / timeRange * buckets), buckets - 1);
+        if (point.severity === 'ERROR' || point.severity === 'CRITICAL') {
+            bucketData[bucketIdx].errors++;
+        } else {
+            bucketData[bucketIdx].warnings++;
+        }
+    });
+
+    // Find max for scaling
+    const maxVal = Math.max(...bucketData.map(b => b.errors + b.warnings), 1);
+
+    // Draw bars
+    const barWidth = rect.width / buckets;
+    const barPadding = 1;
+
+    bucketData.forEach((bucket, idx) => {
+        const x = idx * barWidth + barPadding;
+        const errorHeight = (bucket.errors / maxVal) * (rect.height - 4);
+        const warnHeight = (bucket.warnings / maxVal) * (rect.height - 4);
+
+        // Draw errors (bottom, red)
+        if (bucket.errors > 0) {
+            ctx.fillStyle = '#ef4444';
+            ctx.fillRect(x, rect.height - errorHeight - 2, barWidth - barPadding * 2, errorHeight);
+        }
+
+        // Draw warnings (on top of errors, orange)
+        if (bucket.warnings > 0) {
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(x, rect.height - errorHeight - warnHeight - 2, barWidth - barPadding * 2, warnHeight);
+        }
+    });
+
+    // Click to jump to that time range
+    canvas.onclick = function(e) {
+        const clickX = e.offsetX;
+        const bucketIdx = Math.floor(clickX / barWidth);
+        const bucketTime = new Date(minTime.getTime() + (bucketIdx / buckets) * timeRange);
+
+        // Find closest entry to this time
+        let closestEntry = null;
+        let closestDiff = Infinity;
+
+        entries.forEach(entry => {
+            const ts = entry.dataset.timestamp;
+            if (ts) {
+                const diff = Math.abs(new Date(ts) - bucketTime);
+                if (diff < closestDiff) {
+                    closestDiff = diff;
+                    closestEntry = entry;
+                }
+            }
+        });
+
+        if (closestEntry) {
+            closestEntry.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            closestEntry.classList.add('selected');
+        }
+    };
+}
+
+// ============================================
+// Request ID / Trace ID Detection
+// ============================================
+function highlightTraceIds() {
+    const traceIdPatterns = [
+        /\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/gi, // UUID
+        /\b(trace[_-]?id[=:]\s*)([a-zA-Z0-9_-]{8,})\b/gi, // trace_id=xxx
+        /\b(request[_-]?id[=:]\s*)([a-zA-Z0-9_-]{8,})\b/gi, // request_id=xxx
+        /\b(correlation[_-]?id[=:]\s*)([a-zA-Z0-9_-]{8,})\b/gi, // correlation_id=xxx
+        /\b(span[_-]?id[=:]\s*)([a-zA-Z0-9_-]{8,})\b/gi, // span_id=xxx
+        /\bX-Request-Id:\s*([a-zA-Z0-9_-]{8,})\b/gi, // HTTP header
+    ];
+
+    document.querySelectorAll('.log-entry .raw-content').forEach(contentEl => {
+        let html = contentEl.innerHTML;
+
+        // Skip if already has marks (from search highlighting)
+        if (html.includes('<mark')) return;
+
+        traceIdPatterns.forEach(pattern => {
+            html = html.replace(pattern, (match, ...groups) => {
+                // Find the actual ID (last capture group before offset)
+                const id = groups.filter(g => typeof g === 'string' && g.length >= 8).pop() || match;
+                return `<span class="trace-id" onclick="filterByTraceId('${escapeHtml(id)}', event)" title="Click to filter by this ID">${escapeHtml(match)}</span>`;
+            });
+        });
+
+        contentEl.innerHTML = html;
+    });
+}
+
+function filterByTraceId(traceId, event) {
+    if (event) event.stopPropagation();
+
+    // Set search to trace ID and perform filter
+    document.getElementById('searchInput').value = traceId;
+    viewerState.searchAction = 'highlight';
+    document.getElementById('searchModeHighlight').classList.add('active');
+    document.getElementById('searchModeFilter').classList.remove('active');
+    highlightMatches(traceId, 'contains');
+
+    showCopyToast(`Highlighting trace ID: ${traceId.substring(0, 20)}...`);
+}
+
+// ============================================
+// Initialization
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    // Search mode buttons
+    document.querySelectorAll('.search-option-btn').forEach(btn => {
+        btn.onclick = function() {
+            document.querySelectorAll('.search-option-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            viewerState.searchMode = this.dataset.mode;
+        };
+    });
+
+    // Search action toggle (Filter vs Highlight)
+    document.getElementById('searchModeFilter').onclick = function() {
+        document.getElementById('searchModeFilter').classList.add('active');
+        document.getElementById('searchModeHighlight').classList.remove('active');
+        viewerState.searchAction = 'filter';
+    };
+
+    document.getElementById('searchModeHighlight').onclick = function() {
+        document.getElementById('searchModeHighlight').classList.add('active');
+        document.getElementById('searchModeFilter').classList.remove('active');
+        viewerState.searchAction = 'highlight';
+        // Perform highlight immediately if there's a search term
+        const query = document.getElementById('searchInput').value.trim();
+        if (query) highlightMatches(query, viewerState.searchMode);
+    };
+
+    // Severity filter buttons
+    document.querySelectorAll('.filter-severity').forEach(btn => {
+        btn.onclick = function() { filterBySeverity(this.dataset.severity); };
+    });
+
+    // Initialize features
+    initMinimap();
+    initMinimapDrag();
+    saveBookmarks();
+    renderBookmarks();
+    applyFontSize();
+
+    // Initial highlight if in highlight mode
+    if (viewerState.searchAction === 'highlight' && viewerState.search) {
+        highlightMatches(viewerState.search, viewerState.searchMode);
+    }
+
+    // Jump to line enter
+    document.getElementById('jumpLineInput')?.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); jumpToLine(); }
+    });
+
+    // Initialize time range filter (set "All" as active by default)
+    document.getElementById('presetAll')?.classList.add('active');
+
+    // Initialize error timeline chart
+    initErrorTimeline();
+
+    // Note: Trace ID highlighting removed to avoid conflicts with search highlighting
+    // Users can search for trace IDs using the search bar instead
 });
-{% endif %}
 </script>
 {% endblock %}

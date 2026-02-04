@@ -391,10 +391,10 @@
 
         <div class="card mt-3 bg-primary text-white">
             <div class="card-body text-center">
-                <i class="bi bi-stars fs-1 mb-2"></i>
-                <h6>AI-Powered Analysis</h6>
+                <i class="bi bi-search fs-1 mb-2"></i>
+                <h6>Powerful Log Viewer</h6>
                 <p class="small mb-0 opacity-75">
-                    Every upload is automatically analyzed by AI to find hidden issues and patterns.
+                    Search, filter, and analyze logs with powerful debugging tools.
                 </p>
             </div>
         </div>
@@ -569,10 +569,10 @@ async function uploadAllFiles() {
                 totalErrors += result.file.error_count || 0;
                 totalWarnings += result.file.warning_count || 0;
 
-                // Add link to analyze
+                // Add link to view
                 actionsContainer.innerHTML = `
-                    <a href="/analyze/${result.file.id}" class="btn btn-sm btn-success">
-                        <i class="bi bi-search me-1"></i>Analyze
+                    <a href="/log/${result.file.id}" class="btn btn-sm btn-success">
+                        <i class="bi bi-eye me-1"></i>View
                     </a>
                 `;
             }

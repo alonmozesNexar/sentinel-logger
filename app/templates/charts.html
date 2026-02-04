@@ -8,7 +8,7 @@
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a href="{{ url_for('main.index') }}">Dashboard</a></li>
-                <li class="breadcrumb-item"><a href="{{ url_for('main.analyze', file_id=log_file.id) }}">{{ log_file.original_filename }}</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('main.view_log', file_id=log_file.id) }}">{{ log_file.original_filename }}</a></li>
                 <li class="breadcrumb-item active" aria-current="page">Charts</li>
             </ol>
         </nav>

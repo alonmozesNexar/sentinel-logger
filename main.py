@@ -41,8 +41,8 @@ def parse_args():
     parser.add_argument(
         '--port',
         type=int,
-        default=5000,
-        help='Port to listen on (default: 5000)'
+        default=9898,
+        help='Port to listen on (default: 9898)'
     )
     parser.add_argument(
         '--debug',
