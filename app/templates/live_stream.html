@@ -306,6 +306,32 @@
     background: #3b82f6;
     color: white;
 }
+
+.filter-separator {
+    color: var(--border-color, #cbd5e1);
+    margin: 0 8px;
+}
+
+.service-filter {
+    width: auto;
+    min-width: 150px;
+    max-width: 200px;
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    height: auto;
+    border-radius: 16px;
+    background: var(--bg-tertiary, #e2e8f0);
+    border: none;
+}
+
+.service-filter:focus {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+.service-count {
+    font-size: 0.75rem;
+    margin-left: 4px;
+}
 </style>
 {% endblock %}
 
@@ -315,13 +341,30 @@
         <h1 class="h4 mb-1">
             <i class="bi bi-broadcast text-success me-2"></i>Live Log Stream
         </h1>
-        <p class="text-muted mb-0" style="font-size: 0.9rem;">Watch logs in real-time from camera via SSH</p>
+        <p class="text-muted mb-0" style="font-size: 0.9rem;">Watch logs in real-time from camera via SSH or Serial</p>
     </div>
 </div>
 
 <!-- Camera Connection Panel -->
 <div class="connection-panel" id="cameraPanel">
-    <div class="row g-3 align-items-end">
+    <!-- Transport Selection -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="btn-group" role="group">
+                <input type="radio" class="btn-check" name="transport" id="transportSSH" value="ssh" checked onchange="switchTransport('ssh')">
+                <label class="btn btn-outline-primary" for="transportSSH">
+                    <i class="bi bi-wifi me-1"></i>SSH (WiFi)
+                </label>
+                <input type="radio" class="btn-check" name="transport" id="transportSerial" value="serial" onchange="switchTransport('serial')">
+                <label class="btn btn-outline-primary" for="transportSerial">
+                    <i class="bi bi-usb-symbol me-1"></i>Serial (USB)
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- SSH Settings -->
+    <div class="row g-3 align-items-end" id="sshSettings">
         <div class="col-md-2">
             <label class="form-label">Camera IP</label>
             <input type="text" class="form-control" id="cameraHost" value="192.168.50.1" placeholder="192.168.50.1">
@@ -368,6 +411,53 @@
             </button>
         </div>
     </div>
+
+    <!-- Serial Settings (hidden by default) -->
+    <div class="row g-3 align-items-end d-none" id="serialSettings">
+        <div class="col-md-2">
+            <label class="form-label">Mode</label>
+            <select class="form-select" id="serialMode" onchange="switchSerialMode()">
+                <option value="soc" selected>SOC (Login)</option>
+                <option value="mcu">MCU (Read-only)</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Serial Port</label>
+            <div class="input-group">
+                <select class="form-select" id="serialPort">
+                    <option value="">Select port...</option>
+                </select>
+                <button class="btn btn-outline-secondary" onclick="scanSerialPorts()" id="btnScan" title="Scan ports">
+                    <i class="bi bi-arrow-repeat"></i>
+                </button>
+            </div>
+        </div>
+        <div class="col-md-1">
+            <label class="form-label">Baud</label>
+            <select class="form-select" id="serialBaud">
+                <option value="115200" selected>115200</option>
+                <option value="9600">9600</option>
+                <option value="57600">57600</option>
+                <option value="921600">921600</option>
+            </select>
+        </div>
+        <div class="col-md-5" id="socCommandDiv">
+            <label class="form-label">Command</label>
+            <input type="text" class="form-control" id="serialCommand" value="tail -n 100 -f /var/log/messages" placeholder="tail -f /var/log/messages">
+        </div>
+        <div class="col-md-5 d-none" id="mcuInfoDiv">
+            <label class="form-label">Info</label>
+            <div class="form-control bg-light text-muted" style="height: 38px; line-height: 24px;">
+                <i class="bi bi-info-circle me-1"></i>MCU streams raw data (read-only, no commands)
+            </div>
+        </div>
+        <div class="col-md-1">
+            <button class="btn btn-outline-secondary w-100" onclick="testSerialConnection()" id="btnTestSerial" title="Test serial">
+                <i class="bi bi-plug"></i>
+            </button>
+        </div>
+    </div>
+
     <!-- Connection status alert -->
     <div id="connectionAlert" class="alert mt-3 mb-0 d-none" role="alert"></div>
 </div>
@@ -392,6 +482,11 @@
             <button class="filter-chip" data-filter="info" onclick="setFilter('info')">
                 <i class="bi bi-info-circle"></i>Info
             </button>
+            <span class="filter-separator">|</span>
+            <select class="form-select form-select-sm service-filter" id="processFilter" onchange="setProcessFilter(this.value)">
+                <option value="">All Processes</option>
+            </select>
+            <span class="service-count text-muted" id="processCount">(0 processes)</span>
         </div>
 
         <div class="stream-controls">
@@ -408,7 +503,7 @@
             <button class="stream-btn" onclick="copyAllLogs()" title="Copy All">
                 <i class="bi bi-clipboard"></i>
             </button>
-            <button class="stream-btn active" id="btnConnect" onclick="toggleConnection()">
+            <button class="stream-btn active" id="btnConnect">
                 <i class="bi bi-play-fill"></i>
                 <span>Connect</span>
             </button>
@@ -471,14 +566,18 @@
 // ============================================
 // Live Stream State
 // ============================================
+let currentTransport = 'ssh';  // 'ssh' or 'serial'
+
 const streamState = {
     connected: false,
     paused: false,
     autoscroll: true,
     filter: 'all',
+    processFilter: '',  // Filter by process name
     searchTerm: '',
     eventSource: null,
     lines: [],
+    processes: new Set(),  // Track detected processes
     stats: {
         total: 0,
         errors: 0,
@@ -600,6 +699,7 @@ function clearCommandHistory() {
 // Connection Management
 // ============================================
 function toggleConnection() {
+    console.log('toggleConnection() called, connected:', streamState.connected);
     if (streamState.connected) {
         disconnect();
     } else {
@@ -608,7 +708,14 @@ function toggleConnection() {
 }
 
 function connect() {
-    connectCamera();
+    console.log('connect() called, currentTransport:', currentTransport);
+    if (currentTransport === 'serial') {
+        console.log('Calling connectSerial()');
+        connectSerial();
+    } else {
+        console.log('Calling connectCamera()');
+        connectCamera();
+    }
 }
 
 function applyCommandPreset() {
@@ -619,12 +726,14 @@ function applyCommandPreset() {
 }
 
 function connectCamera() {
+    console.log('connectCamera() started');
     const host = document.getElementById('cameraHost').value;
     const port = document.getElementById('cameraPort').value;
     const user = document.getElementById('cameraUser').value;
     const pass = document.getElementById('cameraPass').value;
     const command = document.getElementById('sshCommand').value;
     const alert = document.getElementById('connectionAlert');
+    console.log('SSH params:', { host, port, user, command });
 
     // Hide any previous alerts
     alert.classList.add('d-none');
@@ -733,8 +842,11 @@ function updateConnectButton(connected) {
 function clearLogOutput() {
     document.getElementById('logOutput').innerHTML = '';
     streamState.lines = [];
+    streamState.processes.clear();
+    streamState.processFilter = '';
     streamState.stats = { total: 0, errors: 0, warnings: 0, startTime: Date.now() };
     updateStats();
+    updateProcessDropdown();
 }
 
 function formatEntry(entry) {
@@ -753,10 +865,84 @@ function getSeverityClass(severity) {
 }
 
 // ============================================
+// Process Detection
+// ============================================
+function detectProcess(content) {
+    // Log format: "Feb  4 15:35:13.912455 [info] logstore[620]: message"
+    // Pattern: "<Month> <day> <time> [level] processname[pid]: message"
+
+    const patterns = [
+        // Nexar camera format: "Feb  4 15:35:13.912455 [info] processname[pid]:"
+        /^\w+\s+\d+\s+[\d:.]+\s+\[\w+\]\s+([a-zA-Z_][\w_.-]*)\[\d+\]:/,
+        // Alternative: "Feb  4 15:35:13 processname[pid]:"
+        /^\w+\s+\d+\s+[\d:.]+\s+([a-zA-Z_][\w_.-]*)\[\d+\]:/,
+        // Simple format: "processname[pid]: message"
+        /([a-zA-Z_][\w_.-]*)\[\d+\]:/,
+    ];
+
+    for (const pattern of patterns) {
+        const match = content.match(pattern);
+        if (match && match[1]) {
+            const process = match[1];
+            // Filter out noise
+            if (process.length > 1 &&
+                !['info', 'debug', 'warn', 'error', 'fatal'].includes(process.toLowerCase())) {
+                return process;
+            }
+        }
+    }
+    return null;
+}
+
+function updateProcessDropdown() {
+    const select = document.getElementById('processFilter');
+    const countEl = document.getElementById('processCount');
+    if (!select) return;
+
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">All Processes</option>';
+
+    // Sort processes alphabetically
+    const sortedProcesses = Array.from(streamState.processes).sort();
+
+    sortedProcesses.forEach(process => {
+        const option = document.createElement('option');
+        option.value = process;
+        option.textContent = process;
+        select.appendChild(option);
+    });
+
+    // Restore selection if still valid
+    if (currentValue && streamState.processes.has(currentValue)) {
+        select.value = currentValue;
+    }
+
+    if (countEl) {
+        countEl.textContent = `(${sortedProcesses.length} processes)`;
+    }
+}
+
+function setProcessFilter(process) {
+    streamState.processFilter = process;
+    rerenderLogs();
+}
+
+// ============================================
 // Log Line Management
 // ============================================
 function addLogLine(content, severityClass = '') {
     if (streamState.paused) return;
+
+    // Detect process from content
+    const process = detectProcess(content);
+    if (process) {
+        const prevSize = streamState.processes.size;
+        streamState.processes.add(process);
+        // Update dropdown if new process detected
+        if (streamState.processes.size > prevSize) {
+            updateProcessDropdown();
+        }
+    }
 
     // Detect severity from content
     if (!severityClass) {
@@ -778,12 +964,17 @@ function addLogLine(content, severityClass = '') {
     if (severityClass === 'warning') streamState.stats.warnings++;
     updateStats();
 
-    // Store line
-    streamState.lines.push({ content, severityClass });
+    // Store line with process
+    streamState.lines.push({ content, severityClass, process });
 
-    // Check filter
+    // Check severity filter
     if (streamState.filter !== 'all' && severityClass !== streamState.filter) {
         return; // Don't display if filtered out
+    }
+
+    // Check process filter
+    if (streamState.processFilter && process !== streamState.processFilter) {
+        return; // Don't display if process doesn't match
     }
 
     // Check search
@@ -795,6 +986,9 @@ function addLogLine(content, severityClass = '') {
     const line = document.createElement('div');
     line.className = 'log-line ' + severityClass;
     line.textContent = content;
+    if (process) {
+        line.dataset.process = process;
+    }
 
     const output = document.getElementById('logOutput');
     output.appendChild(line);
@@ -875,9 +1069,14 @@ function rerenderLogs() {
     output.innerHTML = '';
 
     let matchCount = 0;
-    streamState.lines.forEach(({ content, severityClass }) => {
-        // Check filter
+    streamState.lines.forEach(({ content, severityClass, process }) => {
+        // Check severity filter
         if (streamState.filter !== 'all' && severityClass !== streamState.filter) {
+            return;
+        }
+
+        // Check process filter
+        if (streamState.processFilter && process !== streamState.processFilter) {
             return;
         }
 
@@ -889,6 +1088,9 @@ function rerenderLogs() {
         matchCount++;
         const line = document.createElement('div');
         line.className = 'log-line ' + severityClass;
+        if (process) {
+            line.dataset.process = process;
+        }
 
         // Highlight search term
         if (streamState.searchTerm) {
@@ -952,13 +1154,249 @@ document.addEventListener('keydown', function(e) {
 // Pause overlay click
 document.getElementById('pausedOverlay').addEventListener('click', togglePause);
 
+// ============================================
+// Transport Switching (SSH / Serial)
+// ============================================
+function switchTransport(transport) {
+    currentTransport = transport;
+    const sshSettings = document.getElementById('sshSettings');
+    const serialSettings = document.getElementById('serialSettings');
+
+    if (transport === 'ssh') {
+        sshSettings.classList.remove('d-none');
+        serialSettings.classList.add('d-none');
+    } else {
+        sshSettings.classList.add('d-none');
+        serialSettings.classList.remove('d-none');
+        // Auto-scan serial ports when switching to serial
+        scanSerialPorts();
+    }
+}
+
+// ============================================
+// Serial Port Management
+// ============================================
+function scanSerialPorts() {
+    const btn = document.getElementById('btnScan');
+    const select = document.getElementById('serialPort');
+
+    // Show loading state
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    fetch('/api/stream/serial/ports')
+        .then(r => r.json())
+        .then(data => {
+            select.innerHTML = '<option value="">Select port...</option>';
+            if (data.ports && data.ports.length > 0) {
+                data.ports.forEach(port => {
+                    const option = document.createElement('option');
+                    option.value = port.device;
+                    option.textContent = `${port.device} - ${port.description}`;
+                    select.appendChild(option);
+                });
+                // Auto-select first port
+                if (data.ports.length > 0) {
+                    select.value = data.ports[0].device;
+                }
+            } else {
+                select.innerHTML = '<option value="">No ports found</option>';
+            }
+        })
+        .catch(err => {
+            console.error('Failed to scan ports:', err);
+            select.innerHTML = '<option value="">Error scanning ports</option>';
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
+        });
+}
+
+function switchSerialMode() {
+    const mode = document.getElementById('serialMode').value;
+    const socCommandDiv = document.getElementById('socCommandDiv');
+    const mcuInfoDiv = document.getElementById('mcuInfoDiv');
+
+    if (mode === 'soc') {
+        socCommandDiv.classList.remove('d-none');
+        mcuInfoDiv.classList.add('d-none');
+    } else {
+        socCommandDiv.classList.add('d-none');
+        mcuInfoDiv.classList.remove('d-none');
+    }
+}
+
+function testSerialConnection() {
+    const port = document.getElementById('serialPort').value;
+    const baud = document.getElementById('serialBaud').value;
+    const mode = document.getElementById('serialMode').value;
+    const btn = document.getElementById('btnTestSerial');
+    const alert = document.getElementById('connectionAlert');
+
+    if (!port) {
+        alert.classList.remove('d-none', 'alert-success');
+        alert.classList.add('alert-danger');
+        alert.innerHTML = '<i class="bi bi-x-circle me-2"></i>Please select a serial port first';
+        return;
+    }
+
+    // Show loading state
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    fetch('/api/stream/serial/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ port, baud: parseInt(baud), mode })
+    })
+    .then(r => r.json())
+    .then(data => {
+        alert.classList.remove('d-none', 'alert-success', 'alert-danger');
+        if (data.success) {
+            alert.classList.add('alert-success');
+            alert.innerHTML = `<i class="bi bi-check-circle me-2"></i>${data.message}`;
+        } else {
+            alert.classList.add('alert-danger');
+            alert.innerHTML = `<i class="bi bi-x-circle me-2"></i>${data.message}`;
+        }
+        setTimeout(() => alert.classList.add('d-none'), 5000);
+    })
+    .catch(err => {
+        alert.classList.remove('d-none', 'alert-success');
+        alert.classList.add('alert-danger');
+        alert.innerHTML = `<i class="bi bi-x-circle me-2"></i>Failed to test connection: ${err.message}`;
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-plug"></i>';
+    });
+}
+
+// ============================================
+// Serial Connection
+// ============================================
+function connectSerial() {
+    console.log('connectSerial() started');
+    const portEl = document.getElementById('serialPort');
+    const baudEl = document.getElementById('serialBaud');
+    const modeEl = document.getElementById('serialMode');
+    const commandEl = document.getElementById('serialCommand');
+    const alertEl = document.getElementById('connectionAlert');
+
+    const port = portEl ? portEl.value : '';
+    const baud = baudEl ? baudEl.value : '115200';
+    const mode = modeEl ? modeEl.value : 'soc';
+    const command = commandEl ? commandEl.value : '';
+
+    console.log('Serial params:', { port, baud, mode, command });
+
+    if (!port) {
+        console.log('No port selected');
+        if (alertEl) {
+            alertEl.classList.remove('d-none', 'alert-success');
+            alertEl.classList.add('alert-danger');
+            alertEl.innerHTML = '<i class="bi bi-x-circle me-2"></i>Please select a serial port first';
+        }
+        return;
+    }
+
+    // Hide any previous alerts
+    if (alertEl) {
+        alertEl.classList.add('d-none');
+    }
+
+    setStatus('connecting', 'Connecting...');
+
+    // Build URL with parameters
+    let url = `/api/stream/serial?port=${encodeURIComponent(port)}&baud=${baud}&mode=${mode}`;
+    if (mode === 'soc' && command) {
+        url += `&command=${encodeURIComponent(command)}`;
+    }
+
+    streamState.eventSource = new EventSource(url);
+    streamState.currentCommand = mode === 'soc' ? command : 'MCU read-only';
+
+    streamState.eventSource.onopen = function() {
+        setStatus('connected', `Connected to ${port}`);
+        streamState.connected = true;
+        streamState.stats.startTime = Date.now();
+        updateConnectButton(true);
+        clearLogOutput();
+    };
+
+    streamState.commandSaved = false;
+
+    streamState.eventSource.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            const alertEl = document.getElementById('connectionAlert');
+
+            if (data.type === 'connected') {
+                setStatus('connected', `${port}: ${data.mode || 'streaming'}`);
+                if (alertEl) alertEl.classList.add('d-none');
+            } else if (data.type === 'log') {
+                if (!streamState.commandSaved && mode === 'soc' && streamState.currentCommand) {
+                    saveCommandToHistory(streamState.currentCommand);
+                    streamState.commandSaved = true;
+                }
+                addLogLine(data.content);
+            } else if (data.type === 'error') {
+                setStatus('error', 'Connection Error');
+                if (alertEl) {
+                    alertEl.classList.remove('d-none', 'alert-success');
+                    alertEl.classList.add('alert-danger');
+                    alertEl.innerHTML = `<i class="bi bi-x-circle me-2"></i><strong>Error:</strong> ${data.message}`;
+                }
+                addLogLine(`[ERROR] ${data.message}`, 'error');
+                disconnect();
+            } else if (data.type === 'disconnected') {
+                setStatus('disconnected', 'Disconnected');
+                streamState.connected = false;
+                updateConnectButton(false);
+            }
+        } catch (e) {
+            console.error('Parse error:', e);
+        }
+    };
+
+    streamState.eventSource.onerror = function(e) {
+        setStatus('error', 'Connection failed');
+        streamState.connected = false;
+        updateConnectButton(false);
+
+        const alertEl = document.getElementById('connectionAlert');
+        if (alertEl) {
+            alertEl.classList.remove('d-none', 'alert-success');
+            alertEl.classList.add('alert-danger');
+            alertEl.innerHTML = `<i class="bi bi-x-circle me-2"></i><strong>Serial connection failed</strong><br>
+                <small>Check that the serial port is not in use by another application.</small>`;
+        }
+    };
+}
+
 // Init
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, initializing...');
+
     // Auto-scroll button starts active
     document.getElementById('btnAutoscroll').classList.add('active');
 
     // Load command history
     renderCommandHistory();
+
+    // Add click handler for connect button (backup for onclick)
+    const btnConnect = document.getElementById('btnConnect');
+    if (btnConnect) {
+        console.log('Connect button found, adding click listener');
+        btnConnect.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Connect button clicked via addEventListener');
+            toggleConnection();
+        });
+    } else {
+        console.error('Connect button not found!');
+    }
 });
 </script>
 {% endblock %}

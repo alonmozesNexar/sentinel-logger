@@ -2658,6 +2658,211 @@ def stream_camera_logs():
     )
 
 
+# ============================================
+# Serial Streaming Endpoints
+# ============================================
+
+@api_bp.route('/stream/serial/ports', methods=['GET'])
+def list_serial_ports():
+    """List available serial ports."""
+    try:
+        import serial.tools.list_ports
+        ports = []
+        for port in serial.tools.list_ports.comports():
+            ports.append({
+                'device': port.device,
+                'description': port.description or 'Unknown',
+                'hwid': port.hwid or ''
+            })
+        return jsonify({'ports': ports})
+    except ImportError:
+        return jsonify({'error': 'pyserial not installed', 'ports': []})
+    except Exception as e:
+        return jsonify({'error': str(e), 'ports': []})
+
+
+@api_bp.route('/stream/serial/test', methods=['POST'])
+def test_serial_connection():
+    """Test serial port connection."""
+    try:
+        import serial
+    except ImportError:
+        return jsonify({'success': False, 'message': 'pyserial not installed. Run: pip install pyserial'})
+
+    data = request.get_json() or {}
+    port = data.get('port')
+    baud = data.get('baud', 115200)
+    mode = data.get('mode', 'soc')
+
+    if not port:
+        return jsonify({'success': False, 'message': 'No port specified'})
+
+    try:
+        ser = serial.Serial(port, baud, timeout=2)
+
+        if mode == 'soc':
+            # SOC mode: Try to get a shell prompt by sending enter
+            import time
+            ser.write(b'\n')
+            time.sleep(0.5)
+
+            # Read any available data
+            response = b''
+            while ser.in_waiting:
+                response += ser.read(ser.in_waiting)
+                time.sleep(0.1)
+
+            ser.close()
+            return jsonify({
+                'success': True,
+                'message': f'Serial port {port} opened successfully at {baud} baud (SOC mode)',
+                'response': response.decode('utf-8', errors='replace')[:200]
+            })
+        else:
+            # MCU mode: Just check if port opens
+            ser.close()
+            return jsonify({
+                'success': True,
+                'message': f'Serial port {port} opened successfully at {baud} baud (MCU read-only mode)'
+            })
+
+    except serial.SerialException as e:
+        return jsonify({'success': False, 'message': f'Serial error: {str(e)}'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'})
+
+
+@api_bp.route('/stream/serial', methods=['GET'])
+def stream_serial_logs():
+    """
+    Stream live output from serial port using Server-Sent Events.
+    Supports two modes:
+    - SOC (System on Chip): Login with 'root', send command, stream output
+    - MCU (Microcontroller): Read-only, just stream raw data
+    """
+    from flask import Response, stream_with_context
+    import time
+
+    port = request.args.get('port')
+    baud = request.args.get('baud', 115200, type=int)
+    mode = request.args.get('mode', 'soc')  # 'soc' or 'mcu'
+    command = request.args.get('command', 'tail -n 100 -f /var/log/messages')
+
+    if not port:
+        def error_gen():
+            yield f"data: {json.dumps({'type': 'error', 'message': 'No serial port specified'})}\n\n"
+        return Response(error_gen(), mimetype='text/event-stream')
+
+    def generate():
+        try:
+            import serial
+        except ImportError:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'pyserial not installed'})}\n\n"
+            return
+
+        ser = None
+        try:
+            ser = serial.Serial(port, baud, timeout=0.5)
+
+            if mode == 'soc':
+                # SOC mode: Login and execute command
+                yield f"data: {json.dumps({'type': 'connected', 'port': port, 'mode': 'SOC', 'command': command})}\n\n"
+
+                # Wait a moment for the port to stabilize
+                time.sleep(0.5)
+
+                # Clear any pending data
+                while ser.in_waiting:
+                    ser.read(ser.in_waiting)
+
+                # Send Enter to get prompt
+                ser.write(b'\n')
+                time.sleep(0.3)
+
+                # Read response to check if we need login
+                response = b''
+                start_time = time.time()
+                while time.time() - start_time < 2:
+                    if ser.in_waiting:
+                        response += ser.read(ser.in_waiting)
+                    time.sleep(0.1)
+
+                response_str = response.decode('utf-8', errors='replace')
+
+                # Check if login is required
+                if 'login:' in response_str.lower():
+                    # Send username
+                    ser.write(b'root\n')
+                    time.sleep(0.5)
+
+                    # Read password prompt
+                    response = b''
+                    start_time = time.time()
+                    while time.time() - start_time < 2:
+                        if ser.in_waiting:
+                            response += ser.read(ser.in_waiting)
+                        time.sleep(0.1)
+
+                    response_str = response.decode('utf-8', errors='replace')
+
+                    # Send password if prompted
+                    if 'password:' in response_str.lower():
+                        ser.write(b'root\n')
+                        time.sleep(0.5)
+
+                        # Clear login output
+                        while ser.in_waiting:
+                            ser.read(ser.in_waiting)
+
+                # Now send the command
+                ser.write(f'{command}\n'.encode())
+                time.sleep(0.2)
+
+                # Stream output
+                while True:
+                    if ser.in_waiting:
+                        data = ser.read(ser.in_waiting)
+                        text = data.decode('utf-8', errors='replace')
+                        lines = text.strip().split('\n')
+                        for line in lines:
+                            if line:
+                                yield f"data: {json.dumps({'type': 'log', 'content': line})}\n\n"
+                    time.sleep(0.1)
+
+            else:
+                # MCU mode: Just read raw data
+                yield f"data: {json.dumps({'type': 'connected', 'port': port, 'mode': 'MCU (read-only)'})}\n\n"
+
+                while True:
+                    if ser.in_waiting:
+                        data = ser.read(ser.in_waiting)
+                        text = data.decode('utf-8', errors='replace')
+                        lines = text.strip().split('\n')
+                        for line in lines:
+                            if line:
+                                yield f"data: {json.dumps({'type': 'log', 'content': line})}\n\n"
+                    time.sleep(0.1)
+
+        except serial.SerialException as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': f'Serial error: {str(e)}'})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        finally:
+            if ser and ser.is_open:
+                ser.close()
+            yield f"data: {json.dumps({'type': 'disconnected'})}\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        }
+    )
+
+
 @api_bp.route('/log-files/<int:file_id>/tail', methods=['GET'])
 def tail_log_file(file_id):
     """
