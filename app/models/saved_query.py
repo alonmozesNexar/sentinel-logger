@@ -1,8 +1,36 @@
 """
 Saved Query model for storing user's favorite analysis prompts
+and per-user settings/credentials
 """
 from app import db
 from datetime import datetime
+
+
+class UserSettings(db.Model):
+    """Per-user settings including S3 credentials"""
+    __tablename__ = 'user_settings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_email = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    s3_access_key = db.Column(db.String(255))
+    s3_secret_key = db.Column(db.Text)  # Encrypted in production
+    s3_profile = db.Column(db.String(100))
+    s3_bucket = db.Column(db.String(255))
+    s3_region = db.Column(db.String(50))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_email': self.user_email,
+            's3_profile': self.s3_profile,
+            's3_bucket': self.s3_bucket,
+            's3_region': self.s3_region,
+            'has_s3_keys': bool(self.s3_access_key),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
 
 
 class SavedQuery(db.Model):
@@ -10,6 +38,7 @@ class SavedQuery(db.Model):
     __tablename__ = 'saved_queries'
 
     id = db.Column(db.Integer, primary_key=True)
+    user_email = db.Column(db.String(255), index=True, nullable=True)
     name = db.Column(db.String(100), nullable=False)
     query = db.Column(db.Text, nullable=False)
     description = db.Column(db.String(255))
@@ -40,6 +69,7 @@ class LogAnnotation(db.Model):
     __tablename__ = 'log_annotations'
 
     id = db.Column(db.Integer, primary_key=True)
+    user_email = db.Column(db.String(255), index=True, nullable=True)
     log_file_id = db.Column(db.Integer, db.ForeignKey('log_files.id'), nullable=False)
     line_number = db.Column(db.Integer, nullable=False)
     note = db.Column(db.Text, nullable=False)
@@ -71,6 +101,7 @@ class SharedAnalysis(db.Model):
     __tablename__ = 'shared_analyses'
 
     id = db.Column(db.Integer, primary_key=True)
+    user_email = db.Column(db.String(255), index=True, nullable=True)
     share_id = db.Column(db.String(32), unique=True, nullable=False, index=True)  # UUID for URL
     log_file_id = db.Column(db.Integer, db.ForeignKey('log_files.id'), nullable=False)
     analysis_cache_id = db.Column(db.Integer, db.ForeignKey('ai_analysis_cache.id'))
@@ -107,6 +138,7 @@ class JiraConfig(db.Model):
     __tablename__ = 'jira_config'
 
     id = db.Column(db.Integer, primary_key=True)
+    user_email = db.Column(db.String(255), index=True, nullable=True)
     server_url = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), nullable=False)
     api_token = db.Column(db.Text, nullable=False)  # Should be encrypted in production

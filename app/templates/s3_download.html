@@ -240,28 +240,87 @@
                 {% endif %}
             </div>
             <div class="card-body">
-                <!-- S3 Status Alert -->
+                <!-- S3 Connection Panel (shown when not connected) -->
                 {% if not s3_status.available %}
-                <div class="alert alert-warning">
-                    <i class="bi bi-exclamation-triangle me-2"></i>
-                    <strong>S3 Not Available:</strong> {{ s3_status.message }}
-                    {% if s3_status.profiles %}
-                    <hr class="my-2">
-                    <p class="mb-1 small"><strong>Available AWS Profiles:</strong></p>
-                    <ul class="mb-2 small">
-                        {% for profile in s3_status.profiles %}
-                        <li>
-                            <code>{{ profile.name }}</code>
-                            {% if profile.is_sso %}<span class="badge bg-info">SSO</span>{% endif %}
-                            {% if profile.role %}<small class="text-muted">({{ profile.role }})</small>{% endif %}
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    <p class="mb-0 small">
-                        <strong>To login:</strong>
-                        <code>aws sso login --profile {{ s3_status.profiles[0].name }}</code>
-                    </p>
-                    {% endif %}
+                <div id="s3ConnectPanel" class="card border-warning mb-3">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="bi bi-cloud-slash text-warning" style="font-size: 2rem;"></i>
+                            <div class="ms-3">
+                                <h5 class="mb-1">Connect to S3</h5>
+                                <p class="text-muted mb-0 small">{{ s3_status.message }}</p>
+                            </div>
+                        </div>
+
+                        <!-- Connection Method Tabs -->
+                        <ul class="nav nav-tabs nav-fill mb-3" role="tablist">
+                            {% if s3_status.profiles %}
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#connectProfile" type="button" role="tab">
+                                    <i class="bi bi-person-badge me-1"></i>AWS Profile
+                                </button>
+                            </li>
+                            {% endif %}
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link {% if not s3_status.profiles %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#connectKeys" type="button" role="tab">
+                                    <i class="bi bi-key me-1"></i>Access Keys
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content">
+                            <!-- Profile Tab -->
+                            {% if s3_status.profiles %}
+                            <div class="tab-pane fade show active" id="connectProfile" role="tabpanel">
+                                <p class="small text-muted mb-2">Select an AWS profile to connect. SSO profiles require <code>aws sso login</code> first.</p>
+                                <div class="list-group mb-3">
+                                    {% for profile in s3_status.profiles %}
+                                    <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                                            onclick="connectWithProfile('{{ profile.name }}', this)">
+                                        <div>
+                                            <i class="bi bi-person-circle me-2"></i>
+                                            <strong>{{ profile.name }}</strong>
+                                            {% if profile.is_sso %}<span class="badge bg-info ms-1">SSO</span>{% endif %}
+                                            {% if profile.role %}<br><small class="text-muted ms-4">Role: {{ profile.role }}</small>{% endif %}
+                                            {% if profile.account_id %}<small class="text-muted"> | Account: {{ profile.account_id }}</small>{% endif %}
+                                        </div>
+                                        <i class="bi bi-arrow-right"></i>
+                                    </button>
+                                    {% endfor %}
+                                </div>
+                                <div id="profileConnectStatus" class="small"></div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Access Keys Tab -->
+                            <div class="tab-pane fade {% if not s3_status.profiles %}show active{% endif %}" id="connectKeys" role="tabpanel">
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label form-label-sm">AWS Access Key ID</label>
+                                        <input type="text" class="form-control form-control-sm" id="connectAccessKey" placeholder="AKIA...">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label form-label-sm">AWS Secret Access Key</label>
+                                        <input type="password" class="form-control form-control-sm" id="connectSecretKey" placeholder="Secret key">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label form-label-sm">Bucket <small class="text-muted">(optional)</small></label>
+                                        <input type="text" class="form-control form-control-sm" id="connectBucket" placeholder="{{ s3_status.bucket }}" value="">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label form-label-sm">Region <small class="text-muted">(optional)</small></label>
+                                        <input type="text" class="form-control form-control-sm" id="connectRegion" placeholder="{{ s3_status.region }}" value="">
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <button class="btn btn-primary btn-sm" onclick="connectWithKeys()">
+                                        <i class="bi bi-plug me-1"></i>Connect
+                                    </button>
+                                </div>
+                                <div id="keysConnectStatus" class="mt-2 small"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 {% endif %}
 
@@ -381,6 +440,44 @@
                     {% if s3_status.profile %}
                     Profile: <code>{{ s3_status.profile }}</code>
                     {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Per-User S3 Credentials (sidebar - for managing when already connected) -->
+        {% if s3_status.available %}
+        <div class="card mt-3">
+            <div class="card-header" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#s3CredsForm">
+                <h6 class="mb-0">
+                    <i class="bi bi-key me-2"></i>S3 Credentials
+                    <i class="bi bi-chevron-down float-end"></i>
+                </h6>
+            </div>
+            <div id="s3CredsForm" class="collapse">
+                <div class="card-body small">
+                    <p class="text-muted mb-2">Change credentials or switch profile.</p>
+                    <div class="mb-2">
+                        <label class="form-label form-label-sm">AWS Access Key</label>
+                        <input type="text" class="form-control form-control-sm" id="s3AccessKey" placeholder="AKIA...">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label form-label-sm">AWS Secret Key</label>
+                        <input type="password" class="form-control form-control-sm" id="s3SecretKey" placeholder="Secret key">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label form-label-sm">AWS Profile</label>
+                        <input type="text" class="form-control form-control-sm" id="s3Profile" placeholder="e.g. nexar-sso">
+                    </div>
+                    <div class="d-grid gap-2 mt-3">
+                        <button class="btn btn-primary btn-sm" onclick="saveS3Creds()">
+                            <i class="bi bi-save me-1"></i>Save & Reconnect
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" onclick="clearS3Creds()">
+                            <i class="bi bi-x-circle me-1"></i>Disconnect
+                        </button>
+                    </div>
+                    <div id="s3CredsStatus" class="mt-2 small"></div>
                 </div>
             </div>
         </div>
@@ -908,5 +1005,161 @@ document.getElementById('serial_number').addEventListener('keypress', function(e
         searchLogs();
     }
 });
+
+// ============================================
+// S3 Connection (main panel - when not connected)
+// ============================================
+
+function connectWithProfile(profileName, btnEl) {
+    // Show loading on the clicked button
+    const originalHTML = btnEl.innerHTML;
+    btnEl.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Connecting...';
+    btnEl.disabled = true;
+
+    const statusEl = document.getElementById('profileConnectStatus');
+    statusEl.innerHTML = '';
+
+    // Save profile to session and test connection
+    const formData = new FormData();
+    formData.append('profile', profileName);
+
+    fetch('{{ url_for("main.s3_set_profile") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            statusEl.innerHTML = '<div class="alert alert-success py-2 mt-2"><i class="bi bi-check-circle me-1"></i>Connected! Reloading...</div>';
+            setTimeout(() => location.reload(), 800);
+        } else {
+            statusEl.innerHTML = `<div class="alert alert-danger py-2 mt-2"><i class="bi bi-x-circle me-1"></i>${data.message}</div>`;
+            btnEl.innerHTML = originalHTML;
+            btnEl.disabled = false;
+        }
+    })
+    .catch(err => {
+        statusEl.innerHTML = `<div class="alert alert-danger py-2 mt-2"><i class="bi bi-x-circle me-1"></i>Error: ${err.message}</div>`;
+        btnEl.innerHTML = originalHTML;
+        btnEl.disabled = false;
+    });
+}
+
+function connectWithKeys() {
+    const accessKey = document.getElementById('connectAccessKey').value.trim();
+    const secretKey = document.getElementById('connectSecretKey').value.trim();
+    const bucket = document.getElementById('connectBucket').value.trim();
+    const region = document.getElementById('connectRegion').value.trim();
+
+    const statusEl = document.getElementById('keysConnectStatus');
+
+    if (!accessKey || !secretKey) {
+        statusEl.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Both Access Key and Secret Key are required</span>';
+        return;
+    }
+
+    statusEl.innerHTML = '<span class="text-muted"><span class="spinner-border spinner-border-sm me-1"></span>Testing connection...</span>';
+
+    fetch('/api/s3/credentials', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            access_key: accessKey,
+            secret_key: secretKey,
+            bucket: bucket,
+            region: region,
+            persist: false
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // Test the connection by checking status
+            return fetch('{{ url_for("main.s3_status") }}').then(r => r.json());
+        } else {
+            throw new Error('Failed to save credentials');
+        }
+    })
+    .then(status => {
+        if (status.available) {
+            statusEl.innerHTML = '<div class="alert alert-success py-2"><i class="bi bi-check-circle me-1"></i>Connected! Reloading...</div>';
+            setTimeout(() => location.reload(), 800);
+        } else {
+            statusEl.innerHTML = `<div class="alert alert-danger py-2"><i class="bi bi-x-circle me-1"></i>${status.message}</div>`;
+        }
+    })
+    .catch(err => {
+        statusEl.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle me-1"></i>${err.message}</span>`;
+    });
+}
+
+// ============================================
+// S3 Credentials Management (sidebar - when connected)
+// ============================================
+
+function saveS3Creds() {
+    const accessKey = document.getElementById('s3AccessKey') ? document.getElementById('s3AccessKey').value.trim() : '';
+    const secretKey = document.getElementById('s3SecretKey') ? document.getElementById('s3SecretKey').value.trim() : '';
+    const profile = document.getElementById('s3Profile') ? document.getElementById('s3Profile').value.trim() : '';
+
+    if (!accessKey && !profile) {
+        const statusEl = document.getElementById('s3CredsStatus');
+        if (statusEl) statusEl.innerHTML = '<span class="text-warning">Provide access key or profile</span>';
+        return;
+    }
+
+    fetch('/api/s3/credentials', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            access_key: accessKey,
+            secret_key: secretKey,
+            profile: profile,
+            persist: false
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        const statusEl = document.getElementById('s3CredsStatus');
+        if (data.success) {
+            if (statusEl) statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Saved. Reconnecting...</span>';
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            if (statusEl) statusEl.innerHTML = '<span class="text-danger">Failed to save</span>';
+        }
+    })
+    .catch(err => {
+        const statusEl = document.getElementById('s3CredsStatus');
+        if (statusEl) statusEl.innerHTML = '<span class="text-danger">Error: ' + err.message + '</span>';
+    });
+}
+
+function clearS3Creds() {
+    fetch('/api/s3/credentials', { method: 'DELETE' })
+    .then(r => r.json())
+    .then(data => {
+        ['s3AccessKey', 's3SecretKey', 's3Profile'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        const statusEl = document.getElementById('s3CredsStatus');
+        if (statusEl) statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Credentials cleared</span>';
+        setTimeout(() => location.reload(), 1000);
+    });
+}
+
+// Load existing credentials hint on page load (only if sidebar form exists)
+if (document.getElementById('s3CredsStatus')) {
+    fetch('/api/s3/credentials')
+    .then(r => r.json())
+    .then(data => {
+        if (data.has_credentials) {
+            const status = document.getElementById('s3CredsStatus');
+            if (status) {
+                status.innerHTML = `<span class="text-info"><i class="bi bi-info-circle me-1"></i>Using ${data.source} credentials${data.access_key_hint ? ' (' + data.access_key_hint + ')' : ''}${data.profile ? ' profile: ' + data.profile : ''}</span>`;
+            }
+        }
+    });
+}
 </script>
 {% endblock %}

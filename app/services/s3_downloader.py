@@ -12,7 +12,15 @@ from typing import Optional, List, Dict, Tuple
 from io import BytesIO
 
 import boto3
+from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError, NoCredentialsError, ProfileNotFound
+
+# Boto3 client config with short timeouts to avoid hanging
+_BOTO_CONFIG = BotoConfig(
+    connect_timeout=5,
+    read_timeout=10,
+    retries={'max_attempts': 1}
+)
 
 
 class S3Downloader:
@@ -40,6 +48,10 @@ class S3Downloader:
         # Try to initialize S3 client
         self._init_client(access_key, secret_key)
 
+    def _make_client(self, session):
+        """Create an S3 client with timeout config from a boto3 session."""
+        return session.client('s3', config=_BOTO_CONFIG)
+
     def _init_client(self, access_key: str = None, secret_key: str = None):
         """Initialize S3 client with various auth methods."""
         try:
@@ -50,7 +62,7 @@ class S3Downloader:
                     aws_secret_access_key=secret_key,
                     region_name=self.region
                 )
-                self.s3_client = self.session.client('s3')
+                self.s3_client = self._make_client(self.session)
                 return
 
             # Method 2: AWS Profile (SSO or static)
@@ -60,22 +72,24 @@ class S3Downloader:
                         profile_name=self.profile,
                         region_name=self.region
                     )
-                    self.s3_client = self.session.client('s3')
+                    self.s3_client = self._make_client(self.session)
                     return
                 except ProfileNotFound:
                     self._init_error = f"AWS profile '{self.profile}' not found"
 
-            # Method 3: Try each available profile
+            # Method 3: Try each available profile (with timeout protection)
             available_profiles = self._get_available_profiles()
             for profile_name in available_profiles:
                 try:
-                    self.session = boto3.Session(
+                    session = boto3.Session(
                         profile_name=profile_name,
                         region_name=self.region
                     )
-                    self.s3_client = self.session.client('s3')
-                    # Test if it works
-                    self.s3_client.head_bucket(Bucket=self.bucket)
+                    client = self._make_client(session)
+                    # Test if it works — timeout config prevents hanging
+                    client.head_bucket(Bucket=self.bucket)
+                    self.session = session
+                    self.s3_client = client
                     self.profile = profile_name
                     return
                 except Exception:
@@ -83,13 +97,13 @@ class S3Downloader:
 
             # Method 4: Default credentials chain (env vars, IAM role, etc.)
             self.session = boto3.Session(region_name=self.region)
-            self.s3_client = self.session.client('s3')
+            self.s3_client = self._make_client(self.session)
 
         except Exception as e:
             self._init_error = str(e)
             # Create a dummy client that will fail gracefully
             self.session = boto3.Session(region_name=self.region)
-            self.s3_client = self.session.client('s3')
+            self.s3_client = self._make_client(self.session)
 
     def _get_available_profiles(self) -> List[str]:
         """Get list of available AWS profiles from config."""
@@ -139,7 +153,7 @@ class S3Downloader:
                 profile_name=profile_name,
                 region_name=self.region
             )
-            self.s3_client = self.session.client('s3')
+            self.s3_client = self._make_client(self.session)
             self.profile = profile_name
             self._init_error = None
             return True
@@ -166,7 +180,7 @@ class S3Downloader:
                     profile_name=old_profile,
                     region_name=self.region
                 )
-                self.s3_client = self.session.client('s3')
+                self.s3_client = self._make_client(self.session)
                 self.s3_client.head_bucket(Bucket=self.bucket)
                 self.profile = old_profile
                 return True
@@ -360,8 +374,13 @@ class S3Downloader:
                 'region': self.region,
                 'profile': self.profile,
                 'profiles': available_profiles,
+                'init_error': self._init_error,
                 'message': message
             }
+
+        # If initialization already failed, report that immediately
+        if self._init_error and not self.s3_client:
+            return make_status(False, f"S3 init failed: {self._init_error}")
 
         try:
             self.s3_client.head_bucket(Bucket=self.bucket)
@@ -383,7 +402,7 @@ class S3Downloader:
                 if sso_profiles:
                     msg = f"AWS SSO session expired. Run: aws sso login --profile {sso_profiles[0]['name']}"
                 else:
-                    msg = 'AWS credentials not configured. Set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or configure AWS SSO.'
+                    msg = 'AWS credentials not configured. Use the S3 Credentials form, set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, or configure AWS SSO.'
             else:
                 msg = f"S3 error: {e.response['Error']['Message']}"
             return make_status(False, msg)
@@ -391,7 +410,7 @@ class S3Downloader:
             # Try to auto-refresh for any other error too
             if self._try_refresh_credentials():
                 return make_status(True, f'Connected to S3' + (f' using profile: {self.profile}' if self.profile else ''))
-            return make_status(False, f"Error: {str(e)}")
+            return make_status(False, f"S3 connection error: {str(e)}")
 
     @staticmethod
     def _format_size(size_bytes: int) -> str:

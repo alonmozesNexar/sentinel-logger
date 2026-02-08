@@ -6,6 +6,8 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.absolute()
 
+APP_VERSION = '2.0.0'
+
 
 class Config:
     """Base configuration"""
@@ -41,6 +43,9 @@ class Config:
     CAMERA_LOG_PATH = os.environ.get('CAMERA_LOG_PATH', '/var/log/messages')
     CAMERA_SSH_PORT = int(os.environ.get('CAMERA_SSH_PORT', 22))
     CAMERA_SSH_TIMEOUT = int(os.environ.get('CAMERA_SSH_TIMEOUT', 30))
+
+    # User identity
+    LOCAL_DEV_USER = os.environ.get('LOCAL_DEV_USER', 'local-dev@localhost')
 
     # S3 settings for NexarOne logs
     S3_BUCKET = os.environ.get('S3_BUCKET', 'sdk-logs-prod')

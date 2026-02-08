@@ -8,7 +8,7 @@ from datetime import datetime
 from app import db
 
 # Import additional models
-from app.models.saved_query import SavedQuery, LogAnnotation, SharedAnalysis, JiraConfig
+from app.models.saved_query import UserSettings, SavedQuery, LogAnnotation, SharedAnalysis, JiraConfig
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ class LogFile(db.Model):
     __tablename__ = 'log_files'
 
     id = db.Column(db.Integer, primary_key=True)
+    user_email = db.Column(db.String(255), index=True, nullable=True)
     filename = db.Column(db.String(255), nullable=False)
     original_filename = db.Column(db.String(255), nullable=False)
     file_size = db.Column(db.Integer)

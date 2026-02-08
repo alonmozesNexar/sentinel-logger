@@ -10,6 +10,7 @@ from app.routes import api_bp
 from app import db
 from app.models import LogFile, LogEntry, Issue, BugReport, AIAnalysisCache, SavedQuery, LogAnnotation, SharedAnalysis, JiraConfig
 from app.services import LogParser, IssueDetector, BugReportGenerator, AnalyticsService
+from app.utils import get_current_user, user_log_files, user_owns_log_file
 
 # Try to import psutil for system monitoring
 try:
@@ -21,22 +22,22 @@ except ImportError:
 
 @api_bp.route('/log-files', methods=['GET'])
 def get_log_files():
-    """Get all log files"""
-    log_files = LogFile.query.order_by(LogFile.upload_date.desc()).all()
+    """Get all log files for the current user"""
+    log_files = user_log_files().order_by(LogFile.upload_date.desc()).all()
     return jsonify([f.to_dict() for f in log_files])
 
 
 @api_bp.route('/log-files/<int:file_id>', methods=['GET'])
 def get_log_file(file_id):
     """Get a specific log file"""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     return jsonify(log_file.to_dict())
 
 
 @api_bp.route('/log-files/<int:file_id>/entries', methods=['GET'])
 def get_log_entries(file_id):
     """Get log entries with filtering and pagination"""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
 
     # Pagination with proper validation
     page = max(1, request.args.get('page', 1, type=int))
@@ -83,7 +84,7 @@ def get_log_entries(file_id):
 @api_bp.route('/log-files/<int:file_id>/issues', methods=['GET'])
 def get_log_issues(file_id):
     """Get issues for a specific log file"""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     issues = Issue.query.filter_by(log_file_id=file_id).all()
     return jsonify([i.to_dict() for i in issues])
 
@@ -93,7 +94,7 @@ def search_log_entries(file_id):
     """Search all log entries and return matching line numbers for minimap"""
     import re
 
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
 
     query_str = request.args.get('q', '').strip()
     mode = request.args.get('mode', 'contains')
@@ -135,7 +136,7 @@ def search_log_entries(file_id):
 @api_bp.route('/log-files/<int:file_id>/charts', methods=['GET'])
 def get_chart_data(file_id):
     """Get chart data for a log file"""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
 
     # Get entries
     entries = LogEntry.query.filter_by(log_file_id=file_id).all()
@@ -155,7 +156,7 @@ def get_chart_data(file_id):
 @api_bp.route('/log-files/<int:file_id>/stats', methods=['GET'])
 def get_log_stats(file_id):
     """Get statistics for a log file"""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
 
     entries = LogEntry.query.filter_by(log_file_id=file_id).all()
     entries_data = [e.to_dict() for e in entries]
@@ -172,7 +173,7 @@ def get_log_stats(file_id):
 @api_bp.route('/log-files/<int:file_id>/minimap', methods=['GET'])
 def get_log_minimap(file_id):
     """Get minimap data for log visualization - returns severity info for each significant line"""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
 
     # Get entries with severity (errors, warnings, critical)
     entries = LogEntry.query.filter(
@@ -198,12 +199,13 @@ def get_log_minimap(file_id):
 
 @api_bp.route('/issues', methods=['GET'])
 def get_all_issues():
-    """Get all issues across all log files"""
+    """Get all issues across current user's log files"""
     severity = request.args.get('severity')
     status = request.args.get('status')
     category = request.args.get('category')
 
-    query = Issue.query
+    user_file_ids = [f.id for f in user_log_files().all()]
+    query = Issue.query.filter(Issue.log_file_id.in_(user_file_ids)) if user_file_ids else Issue.query.filter(Issue.id < 0)
 
     if severity:
         query = query.filter_by(severity=severity)
@@ -220,6 +222,7 @@ def get_all_issues():
 def get_issue(issue_id):
     """Get a specific issue"""
     issue = Issue.query.get_or_404(issue_id)
+    user_owns_log_file(issue.log_file_id)
     return jsonify(issue.to_dict())
 
 
@@ -227,6 +230,7 @@ def get_issue(issue_id):
 def update_issue(issue_id):
     """Update issue status"""
     issue = Issue.query.get_or_404(issue_id)
+    user_owns_log_file(issue.log_file_id)
     data = request.get_json()
 
     if 'status' in data:
@@ -240,6 +244,7 @@ def update_issue(issue_id):
 def get_issue_context(issue_id):
     """Get surrounding log context for an issue"""
     issue = Issue.query.get_or_404(issue_id)
+    user_owns_log_file(issue.log_file_id)
 
     affected_lines = json.loads(issue.affected_lines) if issue.affected_lines else []
     context_before = request.args.get('before', 5, type=int)
@@ -265,8 +270,13 @@ def get_issue_context(issue_id):
 
 @api_bp.route('/bug-reports', methods=['GET'])
 def get_bug_reports():
-    """Get all bug reports"""
-    reports = BugReport.query.order_by(BugReport.created_at.desc()).all()
+    """Get all bug reports for the current user"""
+    user_file_ids = [f.id for f in user_log_files().all()]
+    if user_file_ids:
+        user_issue_ids = [i.id for i in Issue.query.filter(Issue.log_file_id.in_(user_file_ids)).all()]
+        reports = BugReport.query.filter(BugReport.issue_id.in_(user_issue_ids)).order_by(BugReport.created_at.desc()).all() if user_issue_ids else []
+    else:
+        reports = []
     return jsonify([r.to_dict() for r in reports])
 
 
@@ -274,6 +284,10 @@ def get_bug_reports():
 def get_bug_report(report_id):
     """Get a specific bug report"""
     report = BugReport.query.get_or_404(report_id)
+    if report.issue_id:
+        issue = Issue.query.get(report.issue_id)
+        if issue:
+            user_owns_log_file(issue.log_file_id)
     return jsonify(report.to_dict())
 
 
@@ -285,7 +299,7 @@ def create_bug_report():
     issue_id = data.get('issue_id')
     if issue_id:
         issue = Issue.query.get_or_404(issue_id)
-        log_file = issue.log_file
+        log_file = user_owns_log_file(issue.log_file_id)
         device_info = json.loads(log_file.device_info) if log_file.device_info else {}
 
         generator = BugReportGenerator()
@@ -422,8 +436,16 @@ def search_logs():
     search_conditions = [LogEntry.raw_content.ilike(f'%{term}%') for term in search_terms]
     query = LogEntry.query.filter(or_(*search_conditions))
 
+    # Scope to user's files
+    user_file_ids = [f.id for f in user_log_files().all()]
     if file_id:
+        # Verify ownership
+        user_owns_log_file(file_id)
         query = query.filter_by(log_file_id=file_id)
+    elif user_file_ids:
+        query = query.filter(LogEntry.log_file_id.in_(user_file_ids))
+    else:
+        return jsonify({'query': query_text, 'search_terms': search_terms, 'smart_search': smart_search, 'count': 0, 'entries': []})
     if severity:
         query = query.filter_by(severity=severity)
     if service:
@@ -455,19 +477,24 @@ def get_services():
 
 @api_bp.route('/summary', methods=['GET'])
 def get_summary():
-    """Get overall summary statistics"""
-    total_files = LogFile.query.count()
-    total_entries = LogEntry.query.count()
-    total_issues = Issue.query.count()
+    """Get overall summary statistics for the current user"""
+    user_files = user_log_files().all()
+    user_file_ids = [f.id for f in user_files]
+
+    total_files = len(user_files)
+    total_entries = LogEntry.query.filter(LogEntry.log_file_id.in_(user_file_ids)).count() if user_file_ids else 0
+
+    issue_query = Issue.query.filter(Issue.log_file_id.in_(user_file_ids)) if user_file_ids else Issue.query.filter(Issue.id < 0)
+    total_issues = issue_query.count()
 
     # Issues by severity
     issues_by_severity = {}
     for severity in ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']:
-        count = Issue.query.filter_by(severity=severity).count()
+        count = issue_query.filter(Issue.severity == severity).count()
         issues_by_severity[severity] = count
 
     # Recent issues
-    recent_issues = Issue.query.order_by(Issue.created_at.desc()).limit(5).all()
+    recent_issues = issue_query.order_by(Issue.created_at.desc()).limit(5).all()
 
     return jsonify({
         'total_files': total_files,
@@ -481,7 +508,7 @@ def get_summary():
 @api_bp.route('/log-files/<int:file_id>/health', methods=['GET'])
 def get_health_score(file_id):
     """Get health score for a log file"""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
 
     entries = LogEntry.query.filter_by(log_file_id=file_id).all()
     entries_data = [e.to_dict() for e in entries]
@@ -498,7 +525,7 @@ def get_health_score(file_id):
 @api_bp.route('/log-files/<int:file_id>/export', methods=['GET'])
 def export_log_file(file_id):
     """Export log file analysis in various formats"""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     export_format = request.args.get('format', 'json')
 
     entries = LogEntry.query.filter_by(log_file_id=file_id).all()
@@ -561,7 +588,7 @@ def export_log_file(file_id):
 @api_bp.route('/log-files/<int:file_id>/patterns', methods=['GET'])
 def get_patterns(file_id):
     """Get detected patterns in a log file"""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
 
     entries = LogEntry.query.filter_by(log_file_id=file_id).all()
     entries_data = [e.to_dict() for e in entries]
@@ -575,7 +602,7 @@ def get_patterns(file_id):
 @api_bp.route('/log-files/<int:file_id>/sequences', methods=['GET'])
 def get_error_sequences(file_id):
     """Get error sequences (cascading failures) in a log file"""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
 
     entries = LogEntry.query.filter_by(log_file_id=file_id).order_by(LogEntry.timestamp).all()
     entries_data = [e.to_dict() for e in entries]
@@ -609,7 +636,7 @@ def get_error_sequences(file_id):
 @api_bp.route('/log-files/<int:file_id>/service-health', methods=['GET'])
 def get_service_health(file_id):
     """Get health metrics for each service in a log file"""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
 
     # Get entries grouped by service
     from sqlalchemy import func
@@ -686,9 +713,7 @@ def compare_log_files():
     comparisons = []
 
     for file_id in file_ids:
-        log_file = LogFile.query.get(file_id)
-        if not log_file:
-            continue
+        log_file = user_owns_log_file(file_id)
 
         issues = Issue.query.filter_by(log_file_id=file_id).all()
 
@@ -748,7 +773,7 @@ def ai_search(file_id):
     """
     from app.services import IntelligentSearch
 
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     data = request.get_json()
 
     query = data.get('query', '').strip()
@@ -799,7 +824,7 @@ def deep_analysis(file_id):
     """
     from app.services import IntelligentSearch, get_ai_agent
 
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     data = request.get_json()
 
     query = data.get('query', '').strip()
@@ -971,7 +996,7 @@ def ai_followup(file_id):
     """
     from app.services import get_ai_agent
 
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     data = request.get_json()
 
     query = data.get('query', '').strip()
@@ -998,7 +1023,7 @@ def get_raw_log(file_id):
     """Get the full raw log file content."""
     from flask import current_app
 
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
 
     # Read the raw file
     file_path = current_app.config['UPLOAD_FOLDER'] / log_file.filename
@@ -1059,7 +1084,7 @@ def clear_ai_conversation():
 @api_bp.route('/log-files/<int:file_id>/reparse', methods=['POST'])
 def reparse_log_file(file_id):
     """Re-parse a log file with current parser settings."""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
 
     # Get the file path
     file_path = current_app.config['UPLOAD_FOLDER'] / log_file.filename
@@ -1163,7 +1188,7 @@ def export_log_csv(file_id):
     import csv
     import io
 
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     entries = LogEntry.query.filter_by(log_file_id=file_id).order_by(LogEntry.line_number).all()
 
     output = io.StringIO()
@@ -1193,7 +1218,7 @@ def export_log_json(file_id):
     """Export log entries as JSON."""
     from flask import Response
 
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     entries = LogEntry.query.filter_by(log_file_id=file_id).order_by(LogEntry.line_number).all()
 
     export_data = {
@@ -1213,7 +1238,7 @@ def export_log_json(file_id):
 def export_issue(issue_id, format):
     """Export issue as Jira, GitHub, or Markdown format."""
     issue = Issue.query.get_or_404(issue_id)
-    log_file = LogFile.query.get(issue.log_file_id)
+    log_file = user_owns_log_file(issue.log_file_id)
 
     generator = BugReportGenerator()
     report = generator.generate_report(
@@ -1236,6 +1261,10 @@ def export_issue(issue_id, format):
 def export_bug_report(report_id, format):
     """Export bug report in specified format."""
     report = BugReport.query.get_or_404(report_id)
+    if report.issue_id:
+        issue = Issue.query.get(report.issue_id)
+        if issue:
+            user_owns_log_file(issue.log_file_id)
 
     if format == 'jira':
         # Jira format
@@ -1346,8 +1375,8 @@ def compare_logs():
     if not file1_id or not file2_id:
         return jsonify({'error': 'Both file IDs required'}), 400
 
-    file1 = LogFile.query.get_or_404(file1_id)
-    file2 = LogFile.query.get_or_404(file2_id)
+    file1 = user_owns_log_file(file1_id)
+    file2 = user_owns_log_file(file2_id)
 
     # Get entries
     entries1 = LogEntry.query.filter_by(log_file_id=file1_id).order_by(LogEntry.line_number).all()
@@ -1524,9 +1553,13 @@ def get_system_stats():
 @api_bp.route('/saved-queries', methods=['GET'])
 def get_saved_queries():
     """Get all saved queries, optionally filtered by category."""
+    from sqlalchemy import or_
     category = request.args.get('category')
 
-    query = SavedQuery.query
+    # Show user's queries plus default (shared) queries
+    query = SavedQuery.query.filter(
+        or_(SavedQuery.user_email == get_current_user(), SavedQuery.user_email.is_(None), SavedQuery.is_default == True)
+    )
     if category:
         query = query.filter_by(category=category)
 
@@ -1548,7 +1581,8 @@ def create_saved_query():
         description=data.get('description'),
         category=data.get('category', 'custom'),
         icon=data.get('icon', 'bi-search'),
-        is_default=False
+        is_default=False,
+        user_email=get_current_user()
     )
     db.session.add(saved_query)
     db.session.commit()
@@ -1700,7 +1734,7 @@ def seed_default_queries():
 @api_bp.route('/log-files/<int:file_id>/annotations', methods=['GET'])
 def get_annotations(file_id):
     """Get all annotations for a log file."""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     annotations = LogAnnotation.query.filter_by(log_file_id=file_id).order_by(LogAnnotation.line_number).all()
     return jsonify([a.to_dict() for a in annotations])
 
@@ -1708,7 +1742,7 @@ def get_annotations(file_id):
 @api_bp.route('/log-files/<int:file_id>/annotations', methods=['POST'])
 def create_annotation(file_id):
     """Create an annotation on a log line."""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     data = request.get_json()
 
     if not data.get('line_number') or not data.get('note'):
@@ -1718,7 +1752,8 @@ def create_annotation(file_id):
         log_file_id=file_id,
         line_number=data['line_number'],
         note=data['note'],
-        annotation_type=data.get('annotation_type', 'note')
+        annotation_type=data.get('annotation_type', 'note'),
+        user_email=get_current_user()
     )
     db.session.add(annotation)
     db.session.commit()
@@ -1764,7 +1799,7 @@ def create_shared_link():
     if not log_file_id:
         return jsonify({'error': 'log_file_id is required'}), 400
 
-    log_file = LogFile.query.get_or_404(log_file_id)
+    log_file = user_owns_log_file(log_file_id)
 
     # Create shared analysis
     share_id = SharedAnalysis.generate_share_id()
@@ -1772,7 +1807,8 @@ def create_shared_link():
         share_id=share_id,
         log_file_id=log_file_id,
         analysis_cache_id=data.get('analysis_cache_id'),
-        title=data.get('title', log_file.original_filename)
+        title=data.get('title', log_file.original_filename),
+        user_email=get_current_user()
     )
 
     # Set expiration if provided (in hours)
@@ -1829,7 +1865,7 @@ def delete_shared_link(share_id):
 @api_bp.route('/log-files/<int:file_id>/shared-links', methods=['GET'])
 def get_file_shared_links(file_id):
     """Get all shared links for a log file."""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     shared_links = SharedAnalysis.query.filter_by(log_file_id=file_id).all()
     return jsonify([s.to_dict() for s in shared_links])
 
@@ -1841,7 +1877,11 @@ def get_file_shared_links(file_id):
 @api_bp.route('/jira/config', methods=['GET'])
 def get_jira_config():
     """Get Jira configuration (without API token)."""
-    config = JiraConfig.query.filter_by(is_active=True).first()
+    from sqlalchemy import or_
+    config = JiraConfig.query.filter(
+        JiraConfig.is_active == True,
+        or_(JiraConfig.user_email == get_current_user(), JiraConfig.user_email.is_(None))
+    ).first()
     if not config:
         return jsonify({'configured': False})
 
@@ -1861,8 +1901,8 @@ def save_jira_config():
         if not data.get(field):
             return jsonify({'error': f'{field} is required'}), 400
 
-    # Deactivate any existing config
-    JiraConfig.query.update({'is_active': False})
+    # Deactivate any existing config for this user
+    JiraConfig.query.filter_by(user_email=get_current_user()).update({'is_active': False})
 
     config = JiraConfig(
         server_url=data['server_url'].rstrip('/'),
@@ -1870,7 +1910,8 @@ def save_jira_config():
         api_token=data['api_token'],
         project_key=data.get('project_key'),
         default_issue_type=data.get('default_issue_type', 'Bug'),
-        is_active=True
+        is_active=True,
+        user_email=get_current_user()
     )
     db.session.add(config)
     db.session.commit()
@@ -1884,7 +1925,11 @@ def test_jira_connection():
     import requests
     from requests.auth import HTTPBasicAuth
 
-    config = JiraConfig.query.filter_by(is_active=True).first()
+    from sqlalchemy import or_
+    config = JiraConfig.query.filter(
+        JiraConfig.is_active == True,
+        or_(JiraConfig.user_email == get_current_user(), JiraConfig.user_email.is_(None))
+    ).first()
     if not config:
         return jsonify({'success': False, 'error': 'Jira not configured'}), 400
 
@@ -1919,7 +1964,11 @@ def get_jira_projects():
     import requests
     from requests.auth import HTTPBasicAuth
 
-    config = JiraConfig.query.filter_by(is_active=True).first()
+    from sqlalchemy import or_
+    config = JiraConfig.query.filter(
+        JiraConfig.is_active == True,
+        or_(JiraConfig.user_email == get_current_user(), JiraConfig.user_email.is_(None))
+    ).first()
     if not config:
         return jsonify({'error': 'Jira not configured'}), 400
 
@@ -1948,7 +1997,11 @@ def create_jira_issue():
     import requests
     from requests.auth import HTTPBasicAuth
 
-    config = JiraConfig.query.filter_by(is_active=True).first()
+    from sqlalchemy import or_
+    config = JiraConfig.query.filter(
+        JiraConfig.is_active == True,
+        or_(JiraConfig.user_email == get_current_user(), JiraConfig.user_email.is_(None))
+    ).first()
     if not config:
         return jsonify({'error': 'Jira not configured'}), 400
 
@@ -2022,7 +2075,7 @@ def create_jira_issue():
 @api_bp.route('/log-files/<int:file_id>/timeline', methods=['GET'])
 def get_issue_timeline(file_id):
     """Get timeline data for issues in a log file."""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
 
     # Get all entries with timestamps
     entries = LogEntry.query.filter(
@@ -2103,9 +2156,7 @@ def multi_file_analysis():
     file_info = []
 
     for file_id in file_ids:
-        log_file = LogFile.query.get(file_id)
-        if not log_file:
-            continue
+        log_file = user_owns_log_file(file_id)
 
         entries = LogEntry.query.filter_by(log_file_id=file_id).order_by(LogEntry.line_number).limit(200).all()
 
@@ -2309,7 +2360,7 @@ def export_log_pdf(file_id):
     except ImportError:
         return jsonify({'error': 'PDF export requires reportlab. Install with: pip install reportlab'}), 503
 
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     entries = LogEntry.query.filter_by(log_file_id=file_id).order_by(LogEntry.line_number).all()
     issues = Issue.query.filter_by(log_file_id=file_id).all()
 
@@ -2381,7 +2432,7 @@ def stream_log_file(file_id):
     from flask import Response, stream_with_context
     import time
 
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     last_line = request.args.get('last_line', 0, type=int)
 
     def generate():
@@ -2868,7 +2919,7 @@ def tail_log_file(file_id):
     """
     Get the last N lines of a log file (for polling-based tail).
     """
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     lines = request.args.get('lines', 50, type=int)
     lines = min(lines, 500)  # Cap at 500
 
@@ -2892,7 +2943,7 @@ def get_new_entries(file_id):
     """
     Get entries newer than a specific line number (for polling-based updates).
     """
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     after_line = request.args.get('after', 0, type=int)
     limit = request.args.get('limit', 100, type=int)
     limit = min(limit, 500)
@@ -2908,3 +2959,109 @@ def get_new_entries(file_id):
         'last_line': entries[-1].line_number if entries else after_line,
         'has_more': len(entries) == limit
     })
+
+
+# ============================================
+# Per-User S3 Credentials Endpoints
+# ============================================
+
+@api_bp.route('/s3/credentials', methods=['GET'])
+def get_s3_credentials():
+    """Get the current user's saved S3 credentials (without secret key)."""
+    from flask import session as flask_session
+    from app.models import UserSettings
+
+    user = get_current_user()
+
+    # Check session first (temporary creds)
+    session_creds = flask_session.get('s3_credentials')
+    if session_creds:
+        return jsonify({
+            'source': 'session',
+            'has_credentials': True,
+            'access_key_hint': session_creds.get('access_key', '')[:4] + '****' if session_creds.get('access_key') else None,
+            'profile': session_creds.get('profile'),
+            'bucket': session_creds.get('bucket'),
+            'region': session_creds.get('region'),
+        })
+
+    # Check persisted settings
+    settings = UserSettings.query.filter_by(user_email=user).first()
+    if settings and settings.s3_access_key:
+        return jsonify({
+            'source': 'saved',
+            'has_credentials': True,
+            'access_key_hint': settings.s3_access_key[:4] + '****',
+            'profile': settings.s3_profile,
+            'bucket': settings.s3_bucket,
+            'region': settings.s3_region,
+        })
+
+    return jsonify({'has_credentials': False})
+
+
+@api_bp.route('/s3/credentials', methods=['POST'])
+def save_s3_credentials():
+    """Save S3 credentials for the current user (in session or DB)."""
+    from flask import session as flask_session
+    from app.services.s3_downloader import reset_s3_downloader
+
+    data = request.get_json()
+    persist = data.get('persist', False)
+
+    creds = {
+        'access_key': data.get('access_key', '').strip(),
+        'secret_key': data.get('secret_key', '').strip(),
+        'profile': data.get('profile', '').strip(),
+        'bucket': data.get('bucket', '').strip(),
+        'region': data.get('region', '').strip(),
+    }
+
+    # Reset global singleton so new credentials take effect
+    reset_s3_downloader()
+
+    if persist:
+        from app.models import UserSettings
+        user = get_current_user()
+        settings = UserSettings.query.filter_by(user_email=user).first()
+        if not settings:
+            settings = UserSettings(user_email=user)
+            db.session.add(settings)
+
+        settings.s3_access_key = creds['access_key'] or None
+        settings.s3_secret_key = creds['secret_key'] or None
+        settings.s3_profile = creds['profile'] or None
+        settings.s3_bucket = creds['bucket'] or None
+        settings.s3_region = creds['region'] or None
+        db.session.commit()
+        # Clear session creds
+        flask_session.pop('s3_credentials', None)
+        return jsonify({'success': True, 'source': 'saved'})
+    else:
+        # Store in session only
+        flask_session['s3_credentials'] = creds
+        return jsonify({'success': True, 'source': 'session'})
+
+
+@api_bp.route('/s3/credentials', methods=['DELETE'])
+def clear_s3_credentials():
+    """Clear the current user's S3 credentials."""
+    from flask import session as flask_session
+    from app.models import UserSettings
+
+    user = get_current_user()
+
+    # Clear session
+    flask_session.pop('s3_credentials', None)
+
+    # Clear persisted
+    settings = UserSettings.query.filter_by(user_email=user).first()
+    if settings:
+        settings.s3_access_key = None
+        settings.s3_secret_key = None
+        settings.s3_profile = None
+        settings.s3_bucket = None
+        settings.s3_region = None
+        db.session.commit()
+
+    return jsonify({'success': True})

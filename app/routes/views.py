@@ -13,8 +13,9 @@ from app.models import LogFile, LogEntry, Issue, BugReport
 from app.routes import main_bp
 from app.services import (
     LogParser, IssueDetector, BugReportGenerator,
-    CameraDownloader, get_s3_downloader
+    CameraDownloader
 )
+from app.utils import get_current_user, user_log_files, user_owns_log_file
 
 
 def allowed_file(filename):
@@ -29,13 +30,14 @@ def allowed_file(filename):
 @main_bp.route('/')
 def index():
     """Main dashboard page"""
-    log_files = LogFile.query.order_by(LogFile.upload_date.desc()).all()
+    log_files = user_log_files().order_by(LogFile.upload_date.desc()).all()
+    user_file_ids = [f.id for f in log_files]
 
     # Calculate overall statistics
     total_errors = sum(f.error_count for f in log_files)
     total_warnings = sum(f.warning_count for f in log_files)
-    total_issues = Issue.query.count()
-    critical_issues = Issue.query.filter_by(severity='CRITICAL').count()
+    total_issues = Issue.query.filter(Issue.log_file_id.in_(user_file_ids)).count() if user_file_ids else 0
+    critical_issues = Issue.query.filter(Issue.log_file_id.in_(user_file_ids), Issue.severity == 'CRITICAL').count() if user_file_ids else 0
 
     return render_template('index.html',
                            log_files=log_files,
@@ -80,7 +82,8 @@ def upload():
             log_file = LogFile(
                 filename=unique_filename,
                 original_filename=filename,
-                file_size=file_size
+                file_size=file_size,
+                user_email=get_current_user()
             )
             db.session.add(log_file)
             db.session.commit()
@@ -130,7 +133,8 @@ def paste_log():
     log_file = LogFile(
         filename=unique_filename,
         original_filename=filename,
-        file_size=file_size
+        file_size=file_size,
+        user_email=get_current_user()
     )
     db.session.add(log_file)
     db.session.commit()
@@ -194,6 +198,7 @@ def camera_download():
             filename=unique_filename,
             original_filename=f"Camera: {log_path}",
             file_size=file_size,
+            user_email=get_current_user(),
             device_info=json.dumps({
                 'source': 'camera',
                 'camera_ip': camera_ip,
@@ -314,9 +319,17 @@ def camera_list_logs():
 def s3_download():
     """Download logs from S3 bucket by serial number"""
     from flask import jsonify
+    from app.utils import get_user_s3_downloader
+    from app.services.s3_downloader import reset_s3_downloader
 
-    s3 = get_s3_downloader()
+    s3 = get_user_s3_downloader()
     s3_status = s3.get_status()
+
+    # If not available, reset singleton and retry (credentials may have been refreshed externally)
+    if not s3_status['available']:
+        reset_s3_downloader()
+        s3 = get_user_s3_downloader()
+        s3_status = s3.get_status()
 
     if request.method == 'POST':
         serial_number = request.form.get('serial_number', '').strip()
@@ -362,6 +375,7 @@ def s3_download():
                 filename=unique_filename,
                 original_filename=f"S3: {serial_number}/{original_name}",
                 file_size=file_size,
+                user_email=get_current_user(),
                 device_info=json.dumps({
                     'source': 's3',
                     'bucket': s3.bucket,
@@ -388,8 +402,9 @@ def s3_download():
 def s3_download_stream():
     """Stream download from S3 with progress support"""
     from flask import jsonify, Response, stream_with_context
+    from app.utils import get_user_s3_downloader
 
-    s3 = get_s3_downloader()
+    s3 = get_user_s3_downloader()
     s3_status = s3.get_status()
 
     serial_number = request.form.get('serial_number', '').strip()
@@ -436,6 +451,7 @@ def s3_download_stream():
             original_filename=f"S3: {serial_number}/{original_name}",
             file_size=file_size,
             upload_date=datetime.utcnow(),
+            user_email=get_current_user(),
             device_info=json.dumps({'source': 's3', 'serial_number': serial_number})
         )
         db.session.add(log_file)
@@ -479,7 +495,8 @@ def s3_list_logs():
         return jsonify({'success': False, 'message': 'Serial number is required'})
 
     try:
-        s3 = get_s3_downloader()
+        from app.utils import get_user_s3_downloader
+        s3 = get_user_s3_downloader()
         # Get more files to allow filtering (increased limit for full coverage)
         files = s3.list_logs(serial_number, date=date, limit=5000)
 
@@ -527,7 +544,8 @@ def s3_list_dates():
         return jsonify({'success': False, 'message': 'Serial number is required'})
 
     try:
-        s3 = get_s3_downloader()
+        from app.utils import get_user_s3_downloader
+        s3 = get_user_s3_downloader()
         dates = s3.get_log_dates(serial_number)
         return jsonify({
             'success': True,
@@ -542,25 +560,45 @@ def s3_list_dates():
 def s3_status():
     """Check S3 connection status"""
     from flask import jsonify
+    from app.utils import get_user_s3_downloader
+    from app.services.s3_downloader import reset_s3_downloader
 
-    s3 = get_s3_downloader()
-    return jsonify(s3.get_status())
+    s3 = get_user_s3_downloader()
+    status = s3.get_status()
+
+    # If not available, reset and retry in case credentials were refreshed
+    if not status['available']:
+        reset_s3_downloader()
+        s3 = get_user_s3_downloader()
+        status = s3.get_status()
+
+    return jsonify(status)
 
 
 @main_bp.route('/s3-set-profile', methods=['POST'])
 def s3_set_profile():
-    """Switch AWS profile for S3 access"""
-    from flask import jsonify
-    from app.services.s3_downloader import reset_s3_downloader
+    """Switch AWS profile for S3 access (stores in session for current user)"""
+    from flask import jsonify, session as flask_session
+    from app.services.s3_downloader import S3Downloader, reset_s3_downloader
 
     profile = request.form.get('profile', '').strip()
     if not profile:
         return jsonify({'success': False, 'message': 'Profile name is required'})
 
-    # Reset and reinitialize with new profile
-    reset_s3_downloader()
-    s3 = get_s3_downloader(profile=profile)
+    # Store profile in session for this user
+    flask_session['s3_credentials'] = {
+        'profile': profile,
+        'access_key': '',
+        'secret_key': '',
+        'bucket': '',
+        'region': '',
+    }
 
+    # Reset global singleton so fresh credentials are used
+    reset_s3_downloader()
+
+    # Test the connection with this profile
+    s3 = S3Downloader(profile=profile)
     status = s3.get_status()
     return jsonify({
         'success': status['available'],
@@ -572,18 +610,21 @@ def s3_set_profile():
 @main_bp.route('/s3-refresh', methods=['POST'])
 def s3_refresh():
     """Refresh S3 connection (re-check credentials)"""
-    from flask import jsonify
+    from flask import jsonify, session as flask_session
     from app.services.s3_downloader import reset_s3_downloader
+    from app.utils import get_user_s3_downloader
 
+    # Clear session creds and reset global singleton to force fresh re-check
+    flask_session.pop('s3_credentials', None)
     reset_s3_downloader()
-    s3 = get_s3_downloader()
+    s3 = get_user_s3_downloader()
     return jsonify(s3.get_status())
 
 
 @main_bp.route('/log/<int:file_id>')
 def view_log(file_id):
     """View log entries with filtering and search modes"""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     file_path = current_app.config['UPLOAD_FOLDER'] / log_file.filename
 
     # Parse file if not already parsed
@@ -688,14 +729,14 @@ def view_log(file_id):
 @main_bp.route('/compare')
 def compare():
     """Compare two log files"""
-    log_files = LogFile.query.order_by(LogFile.upload_date.desc()).all()
+    log_files = user_log_files().order_by(LogFile.upload_date.desc()).all()
     return render_template('compare.html', log_files=log_files)
 
 
 @main_bp.route('/live')
 def live_stream():
     """Live log streaming page"""
-    log_files = LogFile.query.order_by(LogFile.upload_date.desc()).all()
+    log_files = user_log_files().order_by(LogFile.upload_date.desc()).all()
     return render_template('live_stream.html', log_files=log_files)
 
 
@@ -720,8 +761,8 @@ def dashboard():
     else:  # 24h default
         cutoff = now - timedelta(hours=24)
 
-    # Get all log files
-    query = LogFile.query
+    # Get all log files (scoped to current user)
+    query = user_log_files()
     if cutoff:
         query = query.filter(LogFile.upload_date >= cutoff)
     log_files = query.order_by(LogFile.upload_date.desc()).all()
@@ -817,16 +858,22 @@ def dashboard():
         chart_data['errors'].reverse()
         camera_chart_data[camera['id']] = chart_data
 
-    # Get recent errors from log entries
+    # Get recent errors from log entries (scoped to user's files)
+    user_file_ids = [f.id for f in log_files]
     recent_errors = []
-    if cutoff:
-        error_entries = LogEntry.query.filter(
-            LogEntry.severity.in_(['ERROR', 'CRITICAL'])
-        ).order_by(LogEntry.timestamp.desc()).limit(50).all()
+    if user_file_ids:
+        if cutoff:
+            error_entries = LogEntry.query.filter(
+                LogEntry.log_file_id.in_(user_file_ids),
+                LogEntry.severity.in_(['ERROR', 'CRITICAL'])
+            ).order_by(LogEntry.timestamp.desc()).limit(50).all()
+        else:
+            error_entries = LogEntry.query.filter(
+                LogEntry.log_file_id.in_(user_file_ids),
+                LogEntry.severity.in_(['ERROR', 'CRITICAL'])
+            ).order_by(LogEntry.id.desc()).limit(50).all()
     else:
-        error_entries = LogEntry.query.filter(
-            LogEntry.severity.in_(['ERROR', 'CRITICAL'])
-        ).order_by(LogEntry.id.desc()).limit(50).all()
+        error_entries = []
 
     for entry in error_entries:
         log_file = LogFile.query.get(entry.log_file_id)
@@ -859,7 +906,9 @@ def issues_list():
     severity = request.args.get('severity')
     status = request.args.get('status', 'open')
 
-    query = Issue.query
+    # Scope to current user's files
+    user_file_ids = [f.id for f in user_log_files().all()]
+    query = Issue.query.filter(Issue.log_file_id.in_(user_file_ids)) if user_file_ids else Issue.query.filter(Issue.id < 0)
 
     if severity:
         query = query.filter_by(severity=severity)
@@ -878,7 +927,7 @@ def issues_list():
 def issue_detail(issue_id):
     """View issue details"""
     issue = Issue.query.get_or_404(issue_id)
-    log_file = issue.log_file
+    log_file = user_owns_log_file(issue.log_file_id)
 
     # Get context entries
     affected_lines = json.loads(issue.affected_lines) if issue.affected_lines else []
@@ -924,7 +973,7 @@ def issue_detail(issue_id):
 def create_bug_report(issue_id):
     """Create a bug report from an issue"""
     issue = Issue.query.get_or_404(issue_id)
-    log_file = issue.log_file
+    log_file = user_owns_log_file(issue.log_file_id)
 
     if request.method == 'POST':
         generator = BugReportGenerator()
@@ -985,7 +1034,7 @@ def create_jira_bug(issue_id=None):
 
     if issue_id:
         issue = Issue.query.get_or_404(issue_id)
-        log_file = issue.log_file
+        log_file = user_owns_log_file(issue.log_file_id)
 
         # Get context entries for the issue
         affected_lines = json.loads(issue.affected_lines) if issue.affected_lines else []
@@ -1011,13 +1060,23 @@ def create_jira_bug(issue_id=None):
 def view_bug_report(report_id):
     """View a bug report"""
     report = BugReport.query.get_or_404(report_id)
+    # Check ownership through the issue's log file
+    if report.issue_id:
+        issue = Issue.query.get(report.issue_id)
+        if issue:
+            user_owns_log_file(issue.log_file_id)
     return render_template('bug_report.html', report=report)
 
 
 @main_bp.route('/bug-reports')
 def bug_reports_list():
     """List all bug reports"""
-    reports = BugReport.query.order_by(BugReport.created_at.desc()).all()
+    user_file_ids = [f.id for f in user_log_files().all()]
+    if user_file_ids:
+        user_issue_ids = [i.id for i in Issue.query.filter(Issue.log_file_id.in_(user_file_ids)).all()]
+        reports = BugReport.query.filter(BugReport.issue_id.in_(user_issue_ids)).order_by(BugReport.created_at.desc()).all() if user_issue_ids else []
+    else:
+        reports = []
     return render_template('bug_reports.html', reports=reports)
 
 
@@ -1025,6 +1084,10 @@ def bug_reports_list():
 def export_bug_report(report_id, format):
     """Export bug report in specified format"""
     report = BugReport.query.get_or_404(report_id)
+    if report.issue_id:
+        issue = Issue.query.get(report.issue_id)
+        if issue:
+            user_owns_log_file(issue.log_file_id)
     generator = BugReportGenerator()
 
     if format == 'json':
@@ -1049,14 +1112,14 @@ def export_bug_report(report_id, format):
 @main_bp.route('/charts/<int:file_id>')
 def charts(file_id):
     """Charts and visualization page"""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
     return render_template('charts.html', log_file=log_file)
 
 
 @main_bp.route('/delete/<int:file_id>', methods=['POST'])
 def delete_log(file_id):
     """Delete a log file and its data"""
-    log_file = LogFile.query.get_or_404(file_id)
+    log_file = user_owns_log_file(file_id)
 
     # Delete file from disk
     file_path = current_app.config['UPLOAD_FOLDER'] / log_file.filename
@@ -1073,19 +1136,20 @@ def delete_log(file_id):
 
 @main_bp.route('/delete-all', methods=['POST'])
 def delete_all():
-    """Delete all log files, entries, issues, and bug reports"""
-    # Delete all files from uploads folder
+    """Delete all log files, entries, issues, and bug reports for the current user"""
+    user_files = user_log_files().all()
     upload_folder = current_app.config['UPLOAD_FOLDER']
-    for file_path in upload_folder.iterdir():
-        if file_path.is_file():
+
+    for log_file in user_files:
+        # Delete file from disk
+        file_path = upload_folder / log_file.filename
+        if file_path.exists():
             file_path.unlink()
 
-    # Delete all database records
-    BugReport.query.delete()
-    Issue.query.delete()
-    LogEntry.query.delete()
-    LogFile.query.delete()
+        # Delete from database (cascades to entries and issues)
+        db.session.delete(log_file)
+
     db.session.commit()
 
-    flash('All history deleted successfully.', 'success')
+    flash('All your history deleted successfully.', 'success')
     return redirect(url_for('main.index'))

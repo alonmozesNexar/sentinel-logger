@@ -1,0 +1,596 @@
+{% extends "base.html" %}
+
+{% block title %}Multi-Camera Dashboard - Sentinel Logger{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Dashboard Layout */
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.dashboard-header h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.dashboard-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.stat-card {
+    background: var(--bg-primary, white);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-card .stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 4px;
+}
+
+.stat-card .stat-label {
+    font-size: 0.85rem;
+    color: var(--text-muted, #6b7280);
+}
+
+.stat-card.errors .stat-value { color: #ef4444; }
+.stat-card.warnings .stat-value { color: #f59e0b; }
+.stat-card.healthy .stat-value { color: #10b981; }
+
+/* Error Rate Chart */
+.chart-container {
+    background: var(--bg-primary, white);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.chart-container h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chart-wrapper {
+    height: 300px;
+    position: relative;
+}
+
+/* Camera Cards Grid */
+.camera-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.camera-card {
+    background: var(--bg-primary, white);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.2s;
+}
+
+.camera-card:hover {
+    border-color: #3b82f6;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.camera-card-header {
+    padding: 16px 20px;
+    background: var(--bg-secondary, #f8fafc);
+    border-bottom: 1px solid var(--border-color, #e5e7eb);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.camera-name {
+    font-weight: 600;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.camera-name i {
+    color: #3b82f6;
+}
+
+.camera-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+}
+
+.camera-status .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.camera-status.healthy .status-dot { background: #10b981; }
+.camera-status.warning .status-dot { background: #f59e0b; }
+.camera-status.critical .status-dot { background: #ef4444; }
+
+.camera-card-body {
+    padding: 16px 20px;
+}
+
+.camera-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.camera-stat {
+    text-align: center;
+    padding: 8px;
+    background: var(--bg-secondary, #f8fafc);
+    border-radius: 8px;
+}
+
+.camera-stat .value {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.camera-stat .label {
+    font-size: 0.75rem;
+    color: var(--text-muted, #6b7280);
+}
+
+.camera-stat.errors .value { color: #ef4444; }
+.camera-stat.warnings .value { color: #f59e0b; }
+.camera-stat.logs .value { color: #3b82f6; }
+
+/* Mini error chart */
+.mini-chart {
+    height: 60px;
+    margin-bottom: 12px;
+}
+
+.mini-chart canvas {
+    width: 100% !important;
+    height: 60px !important;
+}
+
+/* Recent logs list */
+.recent-logs {
+    font-size: 0.85rem;
+}
+
+.recent-logs-title {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-secondary, #4b5563);
+}
+
+.recent-log-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color, #f3f4f6);
+}
+
+.recent-log-item:last-child {
+    border-bottom: none;
+}
+
+.recent-log-item .log-name {
+    color: var(--text-primary, #1f2937);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    flex: 1;
+    margin-right: 12px;
+}
+
+.recent-log-item .log-time {
+    color: var(--text-muted, #9ca3af);
+    white-space: nowrap;
+}
+
+.camera-card-footer {
+    padding: 12px 20px;
+    background: var(--bg-secondary, #f8fafc);
+    border-top: 1px solid var(--border-color, #e5e7eb);
+}
+
+.camera-card-footer a {
+    font-size: 0.85rem;
+    color: #3b82f6;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.camera-card-footer a:hover {
+    text-decoration: underline;
+}
+
+/* Time range selector */
+.time-range-selector {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.time-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border-color, #e5e7eb);
+    background: var(--bg-primary, white);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.time-btn:hover {
+    background: var(--bg-secondary, #f8fafc);
+}
+
+.time-btn.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+}
+
+/* Error table */
+.error-table {
+    background: var(--bg-primary, white);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.error-table-header {
+    padding: 16px 20px;
+    background: var(--bg-secondary, #f8fafc);
+    border-bottom: 1px solid var(--border-color, #e5e7eb);
+}
+
+.error-table-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.error-table table {
+    width: 100%;
+}
+
+.error-table th {
+    text-align: left;
+    padding: 12px 20px;
+    background: var(--bg-secondary, #f8fafc);
+    border-bottom: 1px solid var(--border-color, #e5e7eb);
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-secondary, #4b5563);
+}
+
+.error-table td {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border-color, #f3f4f6);
+    font-size: 0.9rem;
+}
+
+.error-table tr:last-child td {
+    border-bottom: none;
+}
+
+.error-table tr:hover {
+    background: var(--bg-secondary, #f8fafc);
+}
+
+/* Dark mode */
+[data-theme="dark"] .stat-card,
+[data-theme="dark"] .chart-container,
+[data-theme="dark"] .camera-card,
+[data-theme="dark"] .error-table {
+    background: #1f2937;
+    border-color: #374151;
+}
+
+[data-theme="dark"] .camera-card-header,
+[data-theme="dark"] .camera-card-footer,
+[data-theme="dark"] .error-table-header,
+[data-theme="dark"] .camera-stat {
+    background: #111827;
+}
+
+[data-theme="dark"] .time-btn {
+    background: #1f2937;
+    border-color: #374151;
+    color: #e5e7eb;
+}
+
+[data-theme="dark"] .time-btn:hover {
+    background: #374151;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h1>
+        <i class="bi bi-grid-3x3-gap text-primary"></i>
+        Multi-Camera Dashboard
+    </h1>
+    <div class="time-range-selector">
+        <span style="font-size: 0.85rem; color: var(--text-muted);">Time Range:</span>
+        <button class="time-btn" data-range="1h">1h</button>
+        <button class="time-btn" data-range="6h">6h</button>
+        <button class="time-btn active" data-range="24h">24h</button>
+        <button class="time-btn" data-range="7d">7d</button>
+        <button class="time-btn" data-range="all">All</button>
+    </div>
+</div>
+
+<!-- Overall Stats -->
+<div class="dashboard-stats">
+    <div class="stat-card">
+        <span class="stat-value">{{ cameras|length }}</span>
+        <span class="stat-label">Cameras/Devices</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value">{{ total_logs }}</span>
+        <span class="stat-label">Total Log Files</span>
+    </div>
+    <div class="stat-card errors">
+        <span class="stat-value">{{ total_errors }}</span>
+        <span class="stat-label">Total Errors</span>
+    </div>
+    <div class="stat-card warnings">
+        <span class="stat-value">{{ total_warnings }}</span>
+        <span class="stat-label">Total Warnings</span>
+    </div>
+    <div class="stat-card healthy">
+        <span class="stat-value">{{ healthy_cameras }}</span>
+        <span class="stat-label">Healthy Devices</span>
+    </div>
+</div>
+
+<!-- Error Rate Over Time Chart -->
+<div class="chart-container">
+    <h3>
+        <i class="bi bi-graph-up text-danger"></i>
+        Error Rate Over Time
+    </h3>
+    <div class="chart-wrapper">
+        <canvas id="errorRateChart"></canvas>
+    </div>
+</div>
+
+<!-- Camera Cards Grid -->
+{% if cameras %}
+<h2 class="h5 mb-3">
+    <i class="bi bi-camera-video me-2"></i>
+    Devices ({{ cameras|length }})
+</h2>
+<div class="camera-grid">
+    {% for camera in cameras %}
+    <div class="camera-card" data-camera-id="{{ camera.id }}">
+        <div class="camera-card-header">
+            <div class="camera-name">
+                <i class="bi bi-camera-video-fill"></i>
+                {{ camera.name }}
+            </div>
+            <div class="camera-status {{ camera.status }}">
+                <span class="status-dot"></span>
+                {{ camera.status|capitalize }}
+            </div>
+        </div>
+        <div class="camera-card-body">
+            <div class="camera-stats">
+                <div class="camera-stat logs">
+                    <div class="value">{{ camera.log_count }}</div>
+                    <div class="label">Logs</div>
+                </div>
+                <div class="camera-stat errors">
+                    <div class="value">{{ camera.error_count }}</div>
+                    <div class="label">Errors</div>
+                </div>
+                <div class="camera-stat warnings">
+                    <div class="value">{{ camera.warning_count }}</div>
+                    <div class="label">Warnings</div>
+                </div>
+            </div>
+
+            <!-- Mini error chart for this camera -->
+            <div class="mini-chart">
+                <canvas id="miniChart{{ camera.id }}"></canvas>
+            </div>
+
+            <!-- Recent logs -->
+            <div class="recent-logs">
+                <div class="recent-logs-title">Recent Logs</div>
+                {% for log in camera.recent_logs[:3] %}
+                <div class="recent-log-item">
+                    <a href="{{ url_for('main.view_log', file_id=log.id) }}" class="log-name" title="{{ log.original_filename }}">
+                        {{ log.original_filename }}
+                    </a>
+                    <span class="log-time">{{ log.upload_date.strftime('%b %d, %H:%M') if log.upload_date else '' }}</span>
+                </div>
+                {% else %}
+                <div class="text-muted" style="font-size: 0.85rem;">No logs yet</div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="camera-card-footer">
+            <a href="{{ url_for('main.index') }}?camera={{ camera.name }}">
+                View all logs <i class="bi bi-arrow-right"></i>
+            </a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="bi bi-camera-video" style="font-size: 4rem; color: #d1d5db;"></i>
+    <h3 class="mt-3">No devices found</h3>
+    <p class="text-muted">Upload logs from cameras or other devices to see them here.</p>
+    <a href="{{ url_for('main.camera_download') }}" class="btn btn-primary mt-2">
+        <i class="bi bi-download me-2"></i>Download from Camera
+    </a>
+</div>
+{% endif %}
+
+<!-- Recent Errors Table -->
+{% if recent_errors %}
+<div class="error-table">
+    <div class="error-table-header">
+        <h3><i class="bi bi-exclamation-circle text-danger me-2"></i>Recent Errors</h3>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Device</th>
+                <th>Message</th>
+                <th>Log File</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for error in recent_errors[:20] %}
+            <tr>
+                <td>{{ error.timestamp.strftime('%b %d, %H:%M:%S') if error.timestamp else 'N/A' }}</td>
+                <td>
+                    <span class="badge bg-secondary">{{ error.device or 'Unknown' }}</span>
+                </td>
+                <td class="text-truncate" style="max-width: 400px;" title="{{ error.message }}">
+                    {{ error.message }}
+                </td>
+                <td>
+                    <a href="{{ url_for('main.view_log', file_id=error.log_file_id) }}?search={{ error.line_number }}">
+                        Line {{ error.line_number }}
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Chart data from server
+const errorRateData = {{ error_rate_data|tojson|safe }};
+const cameraChartData = {{ camera_chart_data|tojson|safe }};
+
+// Main error rate chart
+const ctx = document.getElementById('errorRateChart');
+if (ctx) {
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: errorRateData.labels,
+            datasets: [
+                {
+                    label: 'Errors',
+                    data: errorRateData.errors,
+                    borderColor: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                },
+                {
+                    label: 'Warnings',
+                    data: errorRateData.warnings,
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+// Mini charts for each camera
+Object.keys(cameraChartData).forEach(cameraId => {
+    const miniCtx = document.getElementById('miniChart' + cameraId);
+    if (miniCtx) {
+        new Chart(miniCtx, {
+            type: 'bar',
+            data: {
+                labels: cameraChartData[cameraId].labels,
+                datasets: [{
+                    data: cameraChartData[cameraId].errors,
+                    backgroundColor: 'rgba(239, 68, 68, 0.6)',
+                    borderRadius: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: { display: false },
+                    y: {
+                        display: false,
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+});
+
+// Time range selector
+document.querySelectorAll('.time-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        const range = this.dataset.range;
+        // Reload page with time range filter
+        window.location.href = '{{ url_for("main.dashboard") }}?range=' + range;
+    });
+});
+</script>
+{% endblock %}
