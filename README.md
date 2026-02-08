@@ -1,6 +1,8 @@
 # Sentinel Logger
 
-A web application designed for QA testers to analyze camera and hardware log files. Automatically detects errors, warnings, and issues, visualizes log data, and helps create bug reports efficiently.
+A desktop/web application for QA testers to analyze camera and hardware log files. Automatically detects errors, warnings, and issues, visualizes log data, and helps create bug reports efficiently.
+
+Install with `pip install git+https://github.com/alonmozesNexar/sentinel-logger.git` and run `sentinel-logger`.
 
 ## Features
 
@@ -45,38 +47,57 @@ A web application designed for QA testers to analyze camera and hardware log fil
 
 ## Installation
 
-### Prerequisites
-- Python 3.9 or higher
-- pip (Python package manager)
+### Quick Install (recommended)
 
-### Setup
-
-1. Clone or download the project:
 ```bash
-cd "/Users/alonmozes/qa tool"
+pip install git+https://github.com/alonmozesNexar/sentinel-logger.git
+sentinel-logger
 ```
 
-2. Create a virtual environment (recommended):
+The browser opens automatically to `http://localhost:9898`.
+
+### Update
+
+```bash
+pip install --upgrade git+https://github.com/alonmozesNexar/sentinel-logger.git
+```
+
+### Optional Configuration
+
+**S3 log downloads** — configure AWS credentials:
+```bash
+aws configure sso  # or set up ~/.aws/config with your profiles
+```
+
+**AI analysis** — add an API key to a `.env` file in your working directory:
+```
+ANTHROPIC_API_KEY=sk-...
+```
+
+### CLI Options
+
+```
+sentinel-logger [--port PORT] [--host HOST] [--no-browser] [--no-update-check] [--debug]
+```
+
+### Development Setup
+
+1. Clone the repository:
+```bash
+git clone https://github.com/alonmozesNexar/sentinel-logger.git
+cd sentinel-logger
+```
+
+2. Create a virtual environment:
 ```bash
 python3 -m venv venv
-source venv/bin/activate  # On macOS/Linux
-# or
-venv\Scripts\activate  # On Windows
-```
-
-3. Install dependencies:
-```bash
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-4. Run the application:
+3. Run:
 ```bash
 python main.py
-```
-
-5. Open your browser and navigate to:
-```
-http://127.0.0.1:5000
 ```
 
 ## Usage
