@@ -34,6 +34,9 @@ htmlcov/
 # Uploads (user data)
 uploads/
 
+# Claude (local-only settings)
+.claude/settings.local.json
+
 # Packaging
 *.egg-info/
 dist/
