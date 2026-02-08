@@ -16,11 +16,15 @@ __pycache__/
 *.so
 .Python
 
-# IDE
+# IDE / Editor
 .idea/
 .vscode/
+.cursorrules
+.windsurf/
+.gemini/
 *.swp
 *.swo
+*~
 
 # Testing
 .pytest_cache/
@@ -32,6 +36,20 @@ uploads/
 
 # Claude
 .claude/
+
+# Packaging
+*.egg-info/
+dist/
+build/
+*.egg
+
+# AI tools config (local only)
+ai-tools/
+agent_docs/
+
+# Cloud config (managed separately)
+.gcloudignore
+nexar.yaml
 
 # OS
 .DS_Store
