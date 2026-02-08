@@ -34,9 +34,6 @@ htmlcov/
 # Uploads (user data)
 uploads/
 
-# Claude
-.claude/
-
 # Packaging
 *.egg-info/
 dist/
