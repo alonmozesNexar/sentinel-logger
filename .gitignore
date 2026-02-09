@@ -51,6 +51,9 @@ agent_docs/
 .gcloudignore
 nexar.yaml
 
+# Runtime logs
+logs/*.log
+
 # OS
 .DS_Store
 Thumbs.db
