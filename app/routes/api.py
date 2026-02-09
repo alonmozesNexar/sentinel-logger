@@ -151,11 +151,19 @@ def run_db_query(file_id):
 
     query = data['query'].strip()
 
-    # Safety: block destructive statements (read-only viewer)
-    forbidden = ('DROP', 'DELETE', 'INSERT', 'UPDATE', 'ALTER', 'CREATE', 'REPLACE', 'ATTACH', 'DETACH')
-    first_word = query.split()[0].upper() if query.split() else ''
-    if first_word in forbidden:
-        return jsonify({'error': f'Write operations are not allowed ({first_word}). This is a read-only viewer.'}), 403
+    # Safety: only allow SELECT and PRAGMA queries (read-only viewer)
+    # Normalize: strip comments, collapse whitespace
+    import re
+    cleaned = re.sub(r'/\*.*?\*/', ' ', query, flags=re.DOTALL)  # strip block comments
+    cleaned = re.sub(r'--[^\n]*', ' ', cleaned)  # strip line comments
+    cleaned = cleaned.strip()
+    first_word = cleaned.split()[0].upper() if cleaned.split() else ''
+    if first_word not in ('SELECT', 'PRAGMA', 'EXPLAIN', 'WITH'):
+        return jsonify({'error': f'Only SELECT queries are allowed. This is a read-only viewer.'}), 403
+
+    # Block ATTACH which can appear inside queries
+    if re.search(r'\bATTACH\b', cleaned, re.IGNORECASE):
+        return jsonify({'error': 'ATTACH operations are not allowed.'}), 403
 
     # Limit result size
     max_rows = data.get('limit', 1000)
@@ -163,7 +171,8 @@ def run_db_query(file_id):
 
     try:
         start_time = time.time()
-        conn = sqlite3.connect(str(file_path))
+        # Open in read-only mode to prevent any writes
+        conn = sqlite3.connect(f'file:{file_path}?mode=ro', uri=True)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -1543,6 +1552,35 @@ def compare_logs():
         else:
             diff_lines.append({'type': 'context', 'content': line[1:] if line.startswith(' ') else line})
 
+    # Side-by-side diff using SequenceMatcher
+    sm = difflib.SequenceMatcher(None, lines1, lines2)
+    side_by_side = []
+    for op, i1, i2, j1, j2 in sm.get_opcodes():
+        if op == 'equal':
+            for idx in range(i1, i2):
+                side_by_side.append({
+                    'left': {'content': lines1[idx], 'type': 'context', 'num': idx + 1},
+                    'right': {'content': lines2[idx - i1 + j1], 'type': 'context', 'num': idx - i1 + j1 + 1}
+                })
+        elif op == 'replace':
+            max_len = max(i2 - i1, j2 - j1)
+            for k in range(max_len):
+                left = {'content': lines1[i1 + k], 'type': 'removed', 'num': i1 + k + 1} if k < (i2 - i1) else None
+                right = {'content': lines2[j1 + k], 'type': 'added', 'num': j1 + k + 1} if k < (j2 - j1) else None
+                side_by_side.append({'left': left, 'right': right})
+        elif op == 'delete':
+            for idx in range(i1, i2):
+                side_by_side.append({
+                    'left': {'content': lines1[idx], 'type': 'removed', 'num': idx + 1},
+                    'right': None
+                })
+        elif op == 'insert':
+            for idx in range(j1, j2):
+                side_by_side.append({
+                    'left': None,
+                    'right': {'content': lines2[idx], 'type': 'added', 'num': idx + 1}
+                })
+
     # Also compute new/resolved errors for summary
     errors1 = set(e.raw_content or '' for e in entries1 if (e.severity or '').upper() in ('ERROR', 'CRITICAL'))
     errors2 = set(e.raw_content or '' for e in entries2 if (e.severity or '').upper() in ('ERROR', 'CRITICAL'))
@@ -1575,6 +1613,8 @@ def compare_logs():
             'error_diff': sev2['ERROR'] - sev1['ERROR'],
             'warning_diff': sev2['WARNING'] - sev1['WARNING'],
             'diff_lines': diff_lines[:500],
+            'side_by_side': side_by_side[:500],
+            'sbs_truncated': len(side_by_side) > 500,
             'new_errors': new_errors,
             'resolved_errors': resolved_errors,
             'diff_truncated': len(diff_lines) > 500

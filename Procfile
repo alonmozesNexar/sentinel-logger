@@ -1,1 +1,1 @@
-web: gunicorn "app:create_app('default')" --bind 0.0.0.0:$PORT
+web: gunicorn "app:create_app('production')" --bind 0.0.0.0:$PORT

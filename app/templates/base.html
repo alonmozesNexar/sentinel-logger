@@ -55,18 +55,8 @@
                         </ul>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.dashboard') }}">
-                            <i class="bi bi-grid-3x3-gap me-1"></i>Dashboard
-                        </a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('main.live_stream') }}">
                             <i class="bi bi-broadcast me-1"></i>Live
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.compare') }}">
-                            <i class="bi bi-arrow-left-right me-1"></i>Compare
                         </a>
                     </li>
                 </ul>
@@ -312,12 +302,10 @@
     const commandPaletteCommands = [
         // Navigation
         { type: 'nav', icon: 'bi-journal-text', title: 'View Logs', desc: 'Browse all log files', action: () => window.location.href = '{{ url_for("main.index") }}', shortcut: '' },
-        { type: 'nav', icon: 'bi-grid-3x3-gap', title: 'Dashboard', desc: 'Multi-camera dashboard with error rates', action: () => window.location.href = '{{ url_for("main.dashboard") }}', shortcut: '' },
         { type: 'nav', icon: 'bi-broadcast', title: 'Live Stream', desc: 'Watch logs in real-time from camera', action: () => window.location.href = '{{ url_for("main.live_stream") }}', shortcut: '' },
         { type: 'nav', icon: 'bi-upload', title: 'Upload Log File', desc: 'Upload a log file from your computer', action: () => window.location.href = '{{ url_for("main.upload") }}', shortcut: '' },
         { type: 'nav', icon: 'bi-cloud', title: 'Download from S3', desc: 'Browse and download logs from S3 bucket', action: () => window.location.href = '{{ url_for("main.s3_download") }}', shortcut: '' },
         { type: 'nav', icon: 'bi-camera-video', title: 'Download from Camera', desc: 'Connect to camera via SSH and download logs', action: () => window.location.href = '{{ url_for("main.camera_download") }}', shortcut: '' },
-        { type: 'nav', icon: 'bi-arrow-left-right', title: 'Compare Logs', desc: 'Compare two log files side by side', action: () => window.location.href = '{{ url_for("main.compare") }}', shortcut: '' },
 
         // Actions
         { type: 'action', icon: 'bi-search', title: 'Search Logs', desc: 'Search across all log files', action: () => document.querySelector('input[name="q"]')?.focus(), shortcut: 'Ctrl+/' },

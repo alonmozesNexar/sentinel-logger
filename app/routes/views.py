@@ -345,6 +345,24 @@ def s3_download():
             return redirect(url_for('main.s3_download'))
 
         try:
+            # Build display name from S3 key (preserves folder date)
+            display_name = selected_file if selected_file else None
+            if display_name:
+                serial_prefix = serial_number + '/'
+                if display_name.startswith(serial_prefix):
+                    display_name = display_name[len(serial_prefix):]
+
+            # Check for duplicate before downloading
+            if display_name:
+                expected_original = f"S3: {serial_number}/{display_name}"
+                existing = LogFile.query.filter_by(
+                    original_filename=expected_original,
+                    user_email=get_current_user()
+                ).first()
+                if existing:
+                    flash(f'File already downloaded: {display_name}', 'info')
+                    return redirect(url_for('main.view_log', file_id=existing.id))
+
             # Download specific file or first file matching date
             content, metadata = s3.download_log(
                 serial_number=serial_number,
@@ -352,6 +370,16 @@ def s3_download():
                 date=date,
                 decompress=True
             )
+
+            # If display_name wasn't set from selected_file, build it from metadata
+            if not display_name:
+                original_name = metadata.get('filename', 'log.txt')
+                # Try to get folder from S3 key
+                s3_key = metadata.get('key', '')
+                if s3_key.startswith(serial_number + '/'):
+                    display_name = s3_key[len(serial_number) + 1:]
+                else:
+                    display_name = original_name
 
             # Save to uploads folder
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -373,7 +401,7 @@ def s3_download():
             # Create database record
             log_file = LogFile(
                 filename=unique_filename,
-                original_filename=f"S3: {serial_number}/{original_name}",
+                original_filename=f"S3: {serial_number}/{display_name}",
                 file_size=file_size,
                 user_email=get_current_user(),
                 device_info=json.dumps({
@@ -417,6 +445,42 @@ def s3_download_stream():
         return jsonify({'error': f"S3 not available: {s3_status['message']}"}), 503
 
     try:
+        # Build display name from S3 key (preserves folder date)
+        # e.g., "SERIAL/2026-02-09_09-27/mcu.log" -> "2026-02-09_09-27/mcu.log"
+        display_name = selected_file
+        serial_prefix = serial_number + '/'
+        if display_name.startswith(serial_prefix):
+            display_name = display_name[len(serial_prefix):]
+        expected_original = f"S3: {serial_number}/{display_name}"
+
+        # Check for duplicate: skip if same file already downloaded for this user
+        existing = LogFile.query.filter_by(
+            original_filename=expected_original,
+            user_email=get_current_user()
+        ).first()
+        if existing:
+            # Return the existing file instead of downloading again
+            def generate_existing():
+                fpath = current_app.config['UPLOAD_FOLDER'] / existing.filename
+                if fpath.exists():
+                    with open(fpath, 'rb') as ef:
+                        while True:
+                            chunk = ef.read(8192)
+                            if not chunk:
+                                break
+                            yield chunk
+
+            response = Response(
+                stream_with_context(generate_existing()),
+                mimetype='application/octet-stream',
+                headers={
+                    'X-File-Id': str(existing.id),
+                    'X-Total-Size': str(existing.file_size or 0),
+                    'X-Duplicate': 'true',
+                }
+            )
+            return response
+
         # Download with decompression
         content, metadata = s3.download_log(
             serial_number=serial_number,
@@ -454,7 +518,7 @@ def s3_download_stream():
         # Create database record
         log_file = LogFile(
             filename=unique_filename,
-            original_filename=f"S3: {serial_number}/{original_name}",
+            original_filename=expected_original,
             file_size=file_size,
             upload_date=datetime.utcnow(),
             user_email=get_current_user(),

@@ -64,16 +64,10 @@ class ProductionConfig(Config):
     """Production configuration"""
     DEBUG = False
 
-    @property
-    def SECRET_KEY(self):
-        """Require SECRET_KEY in production - do not use defaults."""
-        key = os.environ.get('SECRET_KEY')
-        if not key:
-            raise ValueError(
-                "SECRET_KEY environment variable is required in production. "
-                "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
-            )
-        return key
+    def __init__(self):
+        import secrets as _secrets
+        # Use env var if set, otherwise generate a random key per instance
+        self.SECRET_KEY = os.environ.get('SECRET_KEY') or _secrets.token_hex(32)
 
 
 config = {

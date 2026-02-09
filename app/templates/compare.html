@@ -4,6 +4,7 @@
 
 {% block extra_css %}
 <style>
+/* Unified diff styles (kept for toggle) */
 .diff-view .diff-line {
     padding: 2px 12px;
     white-space: pre-wrap;
@@ -20,6 +21,91 @@
 [data-theme="dark"] .diff-line.removed { background: #450a0a; color: #fca5a5; }
 [data-theme="dark"] .diff-line.hunk { background: #172554; color: #93c5fd; }
 
+/* Side-by-side diff styles */
+.sbs-container {
+    display: flex;
+    width: 100%;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+.sbs-panel {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 600px;
+}
+.sbs-panel:first-child {
+    border-right: 2px solid var(--border-color, #cbd5e1);
+}
+.sbs-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 6px 12px;
+    font-weight: 600;
+    font-size: 0.8rem;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+}
+.sbs-header-left {
+    background: #dbeafe;
+    color: #1e40af;
+}
+.sbs-header-right {
+    background: #e2e8f0;
+    color: #475569;
+}
+[data-theme="dark"] .sbs-header-left {
+    background: #1e3a5f;
+    color: #93c5fd;
+}
+[data-theme="dark"] .sbs-header-right {
+    background: #334155;
+    color: #94a3b8;
+}
+.sbs-row {
+    display: flex;
+    border-bottom: 1px solid var(--border-color, #f1f5f9);
+    min-height: 24px;
+}
+.sbs-num {
+    flex-shrink: 0;
+    width: 40px;
+    text-align: right;
+    padding: 1px 6px;
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.7rem;
+    user-select: none;
+    border-right: 1px solid var(--border-color, #e2e8f0);
+    background: var(--bg-secondary, #f8fafc);
+}
+[data-theme="dark"] .sbs-num {
+    background: #1e293b;
+}
+.sbs-content {
+    flex: 1;
+    padding: 1px 8px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    min-width: 0;
+}
+.sbs-row.added .sbs-content { background: #dcfce7; color: #166534; }
+.sbs-row.removed .sbs-content { background: #fee2e2; color: #991b1b; }
+.sbs-row.context .sbs-content { color: var(--text-muted, #64748b); }
+.sbs-row.empty .sbs-content {
+    background: var(--bg-secondary, #f1f5f9);
+}
+.sbs-row.empty .sbs-num {
+    background: var(--bg-secondary, #f1f5f9);
+}
+
+[data-theme="dark"] .sbs-row.added .sbs-content { background: #052e16; color: #86efac; }
+[data-theme="dark"] .sbs-row.removed .sbs-content { background: #450a0a; color: #fca5a5; }
+[data-theme="dark"] .sbs-row.empty .sbs-content { background: #1e293b; }
+[data-theme="dark"] .sbs-row.empty .sbs-num { background: #1e293b; }
+
+/* Diff error list items */
 .diff-list .diff-error-item {
     padding: 6px 12px;
     font-size: 0.8rem;
@@ -215,16 +301,42 @@
         </div>
     </div>
 
-    <!-- Line Diff View -->
+    <!-- Side-by-Side / Unified Diff View -->
     <div class="card mt-4">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h6 class="mb-0"><i class="bi bi-file-diff me-2"></i>Error/Warning Diff</h6>
-            <button class="btn btn-sm btn-outline-secondary" onclick="copyDiff()" title="Copy diff to clipboard">
-                <i class="bi bi-clipboard me-1"></i>Copy Diff
-            </button>
+            <div class="d-flex gap-2">
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-primary active" id="btnSideBySide" onclick="switchDiffView('sbs')">
+                        <i class="bi bi-layout-split me-1"></i>Side by Side
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" id="btnUnified" onclick="switchDiffView('unified')">
+                        <i class="bi bi-list me-1"></i>Unified
+                    </button>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary" onclick="copyDiff()" title="Copy diff to clipboard">
+                    <i class="bi bi-clipboard me-1"></i>Copy
+                </button>
+            </div>
         </div>
         <div class="card-body p-0">
-            <div id="diffView" class="diff-view" style="max-height: 500px; overflow-y: auto; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.8rem;">
+            <!-- Side-by-Side View -->
+            <div id="sbsView" class="sbs-container">
+                <div class="sbs-panel" id="sbsLeft">
+                    <div class="sbs-header sbs-header-left" id="sbsLeftHeader">
+                        <i class="bi bi-file-text me-1"></i>File 1 (Baseline)
+                    </div>
+                    <div id="sbsLeftBody"></div>
+                </div>
+                <div class="sbs-panel" id="sbsRight">
+                    <div class="sbs-header sbs-header-right" id="sbsRightHeader">
+                        <i class="bi bi-file-text me-1"></i>File 2 (Compare)
+                    </div>
+                    <div id="sbsRightBody"></div>
+                </div>
+            </div>
+            <!-- Unified Diff View (hidden by default) -->
+            <div id="unifiedView" class="diff-view" style="display: none; max-height: 600px; overflow-y: auto; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.8rem;">
                 <div class="text-center text-muted p-4">Diff will appear here after comparison</div>
             </div>
             <div id="diffTruncated" class="text-center text-warning p-2 border-top" style="display: none;">
@@ -271,7 +383,7 @@
                             <ul style="font-size: 0.85rem;" class="text-muted">
                                 <li><strong>New Errors</strong> &mdash; Errors that appeared in File 2 but not in File 1 (regressions)</li>
                                 <li><strong>Resolved Errors</strong> &mdash; Errors from File 1 that are gone in File 2 (fixes)</li>
-                                <li><strong>Line Diff</strong> &mdash; Unified diff of all error/warning lines</li>
+                                <li><strong>Side-by-Side Diff</strong> &mdash; Both files shown side by side with differences highlighted</li>
                                 <li><strong>Severity Chart</strong> &mdash; Side-by-side bar chart of error counts</li>
                             </ul>
                         </div>
@@ -286,6 +398,8 @@
 {% block extra_js %}
 <script>
 let severityChart = null;
+let currentDiffView = 'sbs';
+let lastComparisonData = null;
 
 async function compareFiles() {
     const file1 = document.getElementById('file1').value;
@@ -314,6 +428,7 @@ async function compareFiles() {
             return;
         }
 
+        lastComparisonData = data;
         displayResults(data);
     } catch (error) {
         console.error('Comparison failed:', error);
@@ -362,12 +477,95 @@ function displayResults(data) {
     document.getElementById('newErrorCount').textContent = (data.comparison.new_errors || []).length;
     document.getElementById('resolvedErrorCount').textContent = (data.comparison.resolved_errors || []).length;
 
-    // Diff view
+    // Side-by-side view
+    renderSideBySide(data);
+
+    // Unified diff view
     renderDiff(data.comparison.diff_lines || []);
-    document.getElementById('diffTruncated').style.display = data.comparison.diff_truncated ? 'block' : 'none';
+
+    // Truncation notice
+    const truncated = (currentDiffView === 'sbs') ? data.comparison.sbs_truncated : data.comparison.diff_truncated;
+    document.getElementById('diffTruncated').style.display = truncated ? 'block' : 'none';
 
     // Chart
     updateChart(data.file1, data.file2);
+
+    // Setup scroll sync
+    setupScrollSync();
+}
+
+function renderSideBySide(data) {
+    const sbsPairs = data.comparison.side_by_side || [];
+    const leftBody = document.getElementById('sbsLeftBody');
+    const rightBody = document.getElementById('sbsRightBody');
+
+    // Update headers
+    document.getElementById('sbsLeftHeader').innerHTML = `<i class="bi bi-file-text me-1"></i>${escapeHtml(data.file1.name)}`;
+    document.getElementById('sbsRightHeader').innerHTML = `<i class="bi bi-file-text me-1"></i>${escapeHtml(data.file2.name)}`;
+
+    if (sbsPairs.length === 0) {
+        leftBody.innerHTML = '<div class="text-center text-muted p-4"><i class="bi bi-check-circle text-success me-2"></i>No differences</div>';
+        rightBody.innerHTML = '<div class="text-center text-muted p-4"><i class="bi bi-check-circle text-success me-2"></i>No differences</div>';
+        return;
+    }
+
+    let leftHtml = '';
+    let rightHtml = '';
+
+    sbsPairs.forEach(pair => {
+        // Left side
+        if (pair.left) {
+            leftHtml += `<div class="sbs-row ${pair.left.type}"><div class="sbs-num">${pair.left.num}</div><div class="sbs-content">${escapeHtml(pair.left.content)}</div></div>`;
+        } else {
+            leftHtml += `<div class="sbs-row empty"><div class="sbs-num"></div><div class="sbs-content"></div></div>`;
+        }
+
+        // Right side
+        if (pair.right) {
+            rightHtml += `<div class="sbs-row ${pair.right.type}"><div class="sbs-num">${pair.right.num}</div><div class="sbs-content">${escapeHtml(pair.right.content)}</div></div>`;
+        } else {
+            rightHtml += `<div class="sbs-row empty"><div class="sbs-num"></div><div class="sbs-content"></div></div>`;
+        }
+    });
+
+    leftBody.innerHTML = leftHtml;
+    rightBody.innerHTML = rightHtml;
+}
+
+function setupScrollSync() {
+    const leftPanel = document.getElementById('sbsLeft');
+    const rightPanel = document.getElementById('sbsRight');
+    let isSyncing = false;
+
+    leftPanel.onscroll = function() {
+        if (isSyncing) return;
+        isSyncing = true;
+        rightPanel.scrollTop = leftPanel.scrollTop;
+        isSyncing = false;
+    };
+
+    rightPanel.onscroll = function() {
+        if (isSyncing) return;
+        isSyncing = true;
+        leftPanel.scrollTop = rightPanel.scrollTop;
+        isSyncing = false;
+    };
+}
+
+function switchDiffView(mode) {
+    currentDiffView = mode;
+
+    document.getElementById('btnSideBySide').classList.toggle('active', mode === 'sbs');
+    document.getElementById('btnUnified').classList.toggle('active', mode === 'unified');
+
+    document.getElementById('sbsView').style.display = mode === 'sbs' ? 'flex' : 'none';
+    document.getElementById('unifiedView').style.display = mode === 'unified' ? 'block' : 'none';
+
+    // Update truncation notice
+    if (lastComparisonData) {
+        const truncated = (mode === 'sbs') ? lastComparisonData.comparison.sbs_truncated : lastComparisonData.comparison.diff_truncated;
+        document.getElementById('diffTruncated').style.display = truncated ? 'block' : 'none';
+    }
 }
 
 function updateIssueList(elementId, issues, badgeType) {
@@ -400,7 +598,7 @@ function escapeHtml(text) {
 }
 
 function renderDiff(diffLines) {
-    const container = document.getElementById('diffView');
+    const container = document.getElementById('unifiedView');
     if (diffLines.length === 0) {
         container.innerHTML = '<div class="text-center text-muted p-4"><i class="bi bi-check-circle text-success me-2"></i>No differences in error/warning lines</div>';
         return;
@@ -412,12 +610,45 @@ function renderDiff(diffLines) {
 }
 
 function copyDiff() {
-    const container = document.getElementById('diffView');
-    const lines = Array.from(container.querySelectorAll('.diff-line')).map(el => el.textContent);
-    if (lines.length === 0) return;
+    let text = '';
 
-    navigator.clipboard.writeText(lines.join('\n')).then(() => {
-        alert('Diff copied to clipboard!');
+    if (currentDiffView === 'sbs') {
+        // Copy side-by-side as two-column text
+        const leftRows = document.querySelectorAll('#sbsLeftBody .sbs-row');
+        const rightRows = document.querySelectorAll('#sbsRightBody .sbs-row');
+        const lines = [];
+        for (let i = 0; i < leftRows.length; i++) {
+            const leftContent = leftRows[i]?.querySelector('.sbs-content')?.textContent || '';
+            const rightContent = rightRows[i]?.querySelector('.sbs-content')?.textContent || '';
+            const leftNum = leftRows[i]?.querySelector('.sbs-num')?.textContent?.trim() || '';
+            const rightNum = rightRows[i]?.querySelector('.sbs-num')?.textContent?.trim() || '';
+            const leftType = leftRows[i]?.classList.contains('removed') ? '-' : leftRows[i]?.classList.contains('context') ? ' ' : leftRows[i]?.classList.contains('empty') ? ' ' : ' ';
+            const rightType = rightRows[i]?.classList.contains('added') ? '+' : rightRows[i]?.classList.contains('context') ? ' ' : rightRows[i]?.classList.contains('empty') ? ' ' : ' ';
+            lines.push(`${leftType} ${leftNum.padStart(4)} | ${leftContent}`);
+            lines.push(`${rightType} ${rightNum.padStart(4)} | ${rightContent}`);
+            lines.push('');
+        }
+        text = lines.join('\n');
+    } else {
+        // Copy unified diff
+        const diffLines = document.querySelectorAll('#unifiedView .diff-line');
+        text = Array.from(diffLines).map(el => el.textContent).join('\n');
+    }
+
+    if (!text.trim()) return;
+
+    navigator.clipboard.writeText(text).then(() => {
+        // Show toast-style feedback
+        const btn = event.target.closest('button');
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check me-1"></i>Copied!';
+        btn.classList.add('btn-success');
+        btn.classList.remove('btn-outline-secondary');
+        setTimeout(() => {
+            btn.innerHTML = orig;
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-secondary');
+        }, 1500);
     });
 }
 

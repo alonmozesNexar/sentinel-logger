@@ -28,11 +28,11 @@ def create_app(config_name='default'):
     def from_json_filter(value):
         """Parse a JSON string into a Python object"""
         if value is None:
-            return []
+            return {}
         try:
             return json.loads(value)
         except (json.JSONDecodeError, TypeError):
-            return []
+            return {}
 
     # User identity middleware
     @app.before_request
@@ -62,6 +62,15 @@ def create_app(config_name='default'):
         response.headers['X-Frame-Options'] = 'SAMEORIGIN'
         response.headers['X-XSS-Protection'] = '1; mode=block'
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' cdn.jsdelivr.net cdnjs.cloudflare.com; "
+            "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdnjs.cloudflare.com fonts.googleapis.com; "
+            "font-src 'self' cdn.jsdelivr.net cdnjs.cloudflare.com fonts.gstatic.com; "
+            "img-src 'self' data:; "
+            "connect-src 'self'"
+        )
+        response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
         return response
 
     # Error handlers

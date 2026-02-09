@@ -4,120 +4,6 @@
 
 {% block extra_css %}
 <style>
-/* Nexar-inspired clean styling */
-.log-card {
-    border: 1px solid var(--border-color, #e5e7eb);
-    border-radius: 12px;
-    transition: all 0.2s ease;
-    overflow: hidden;
-}
-
-.log-card:hover {
-    border-color: #3b82f6;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
-}
-
-.log-card .card-body {
-    padding: 16px 20px;
-}
-
-.log-card .log-name {
-    font-weight: 600;
-    font-size: 1rem;
-    color: var(--text-primary, #1f2937);
-    margin-bottom: 4px;
-}
-
-.log-card .log-meta {
-    font-size: 0.85rem;
-    color: var(--text-muted, #6b7280);
-}
-
-.log-card .log-stats {
-    display: flex;
-    gap: 16px;
-    margin-top: 12px;
-}
-
-.log-card .stat {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.85rem;
-}
-
-.log-card .stat.errors {
-    color: #ef4444;
-}
-
-.log-card .stat.warnings {
-    color: #f59e0b;
-}
-
-.log-card .stat.lines {
-    color: #6b7280;
-}
-
-.empty-state {
-    text-align: center;
-    padding: 80px 20px;
-}
-
-.empty-state i {
-    font-size: 4rem;
-    color: #d1d5db;
-    margin-bottom: 16px;
-}
-
-.empty-state h3 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: var(--text-primary, #1f2937);
-    margin-bottom: 8px;
-}
-
-.empty-state p {
-    color: var(--text-muted, #6b7280);
-    margin-bottom: 24px;
-}
-
-.source-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    justify-content: center;
-}
-
-.source-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 16px 24px;
-    border: 2px solid var(--border-color, #e5e7eb);
-    border-radius: 12px;
-    background: var(--bg-secondary, #fff);
-    color: var(--text-primary, #1f2937);
-    text-decoration: none;
-    transition: all 0.2s;
-    min-width: 140px;
-}
-
-.source-btn:hover {
-    border-color: #3b82f6;
-    background: rgba(59, 130, 246, 0.05);
-    color: #3b82f6;
-}
-
-.source-btn i {
-    font-size: 1.75rem;
-    margin-bottom: 8px;
-}
-
-.source-btn span {
-    font-size: 0.9rem;
-    font-weight: 500;
-}
-
 /* Page header */
 .page-header {
     display: flex;
@@ -125,7 +11,6 @@
     align-items: center;
     margin-bottom: 24px;
 }
-
 .page-header h1 {
     font-size: 1.5rem;
     font-weight: 600;
@@ -134,55 +19,202 @@
     align-items: center;
     gap: 12px;
 }
-
 .page-header .actions {
     display: flex;
     gap: 8px;
 }
 
-/* Summary stats bar */
+/* Stats bar */
 .stats-bar {
     display: flex;
     gap: 24px;
     padding: 16px 0;
     border-bottom: 1px solid var(--border-color, #e5e7eb);
-    margin-bottom: 24px;
+    margin-bottom: 16px;
 }
+.stats-bar .stat-item { display: flex; align-items: center; gap: 8px; }
+.stats-bar .stat-value { font-size: 1.25rem; font-weight: 700; }
+.stats-bar .stat-label { font-size: 0.85rem; color: var(--text-muted, #6b7280); }
 
-.stats-bar .stat-item {
+/* Filter bar */
+.filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg-secondary, #f8fafc);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 10px;
+    margin-bottom: 16px;
+}
+.filter-bar .filter-group { display: flex; align-items: center; gap: 6px; }
+.filter-bar .filter-label { font-size: 0.78rem; font-weight: 600; color: var(--text-muted, #6b7280); white-space: nowrap; }
+.filter-bar .form-control-sm { font-size: 0.82rem; padding: 4px 10px; }
+.filter-bar .form-select-sm { font-size: 0.82rem; padding: 4px 28px 4px 10px; max-width: 200px; }
+.filter-bar .btn-group-sm .btn { font-size: 0.78rem; padding: 3px 10px; }
+.filter-count { font-size: 0.82rem; color: var(--text-muted, #6b7280); margin-left: auto; white-space: nowrap; }
+.filter-count .active-count { color: #3b82f6; font-weight: 600; }
+
+/* Log table */
+.log-table-container {
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 10px;
+    overflow: hidden;
+}
+.log-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+.log-table thead th {
+    background: var(--bg-secondary, #f8fafc);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted, #6b7280);
+    border-bottom: 2px solid var(--border-color, #e5e7eb);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+.log-table thead th:hover {
+    color: var(--text-primary, #1f2937);
+    background: var(--bg-tertiary, #f1f5f9);
+}
+.log-table thead th .sort-icon {
+    margin-left: 4px;
+    font-size: 0.7rem;
+    opacity: 0.3;
+}
+.log-table thead th.sorted .sort-icon { opacity: 1; color: #3b82f6; }
+.log-table tbody tr {
+    border-bottom: 1px solid var(--border-color, #f1f5f9);
+    transition: background 0.1s;
+}
+.log-table tbody tr:hover {
+    background: rgba(59, 130, 246, 0.04);
+}
+.log-table tbody tr:last-child { border-bottom: none; }
+.log-table td {
+    padding: 10px 14px;
+    vertical-align: middle;
+}
+.log-table .col-name {
+    max-width: 400px;
+}
+.log-table .file-link {
+    color: var(--text-primary, #1f2937);
+    text-decoration: none;
+    font-weight: 500;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
-
-.stats-bar .stat-value {
-    font-size: 1.25rem;
-    font-weight: 700;
+.log-table .file-link:hover {
+    color: #3b82f6;
 }
+.log-table .file-link .fname {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.log-table .col-serial { white-space: nowrap; }
+.log-table .col-date { white-space: nowrap; font-size: 0.8rem; color: var(--text-muted, #6b7280); }
+.log-table .col-size { white-space: nowrap; font-size: 0.8rem; color: var(--text-muted, #6b7280); text-align: right; }
+.log-table .col-stats { white-space: nowrap; }
+.log-table .col-actions { white-space: nowrap; text-align: right; width: 80px; }
 
-.stats-bar .stat-label {
-    font-size: 0.85rem;
+.stat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+.stat-pill.errors { background: #fef2f2; color: #dc2626; }
+.stat-pill.warnings { background: #fffbeb; color: #d97706; }
+.stat-pill.lines { background: var(--bg-secondary, #f3f4f6); color: var(--text-muted, #6b7280); }
+.stat-pill.errors.zero, .stat-pill.warnings.zero { opacity: 0.4; }
+
+[data-theme="dark"] .stat-pill.errors { background: #450a0a; color: #fca5a5; }
+[data-theme="dark"] .stat-pill.warnings { background: #451a03; color: #fcd34d; }
+[data-theme="dark"] .stat-pill.lines { background: #1f2937; }
+
+.serial-badge {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 500;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    background: #dbeafe;
+    color: #1e40af;
+}
+[data-theme="dark"] .serial-badge { background: #1e3a5f; color: #93c5fd; }
+
+/* Group headers */
+.group-header td {
+    background: var(--bg-secondary, #f8fafc);
+    padding: 10px 14px !important;
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--text-primary, #1f2937);
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color, #e5e7eb) !important;
+    border-top: 1px solid var(--border-color, #e5e7eb) !important;
+}
+.group-header:first-child td { border-top: none !important; }
+.group-header td:hover { background: var(--bg-tertiary, #eef2f7); }
+.group-header .group-toggle { margin-right: 6px; transition: transform 0.2s; font-size: 0.75rem; }
+.group-header .group-toggle.collapsed { transform: rotate(-90deg); }
+.group-header .group-count {
+    font-weight: 400;
     color: var(--text-muted, #6b7280);
+    font-size: 0.8rem;
+    margin-left: 8px;
 }
+.group-header .group-date-key {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-muted, #94a3b8);
+    margin-left: 6px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+[data-theme="dark"] .group-header td { background: #1e293b; border-color: #374151 !important; }
+[data-theme="dark"] .group-header td:hover { background: #253347; }
+
+/* Empty state */
+.empty-state { text-align: center; padding: 80px 20px; }
+.empty-state i { font-size: 4rem; color: #d1d5db; margin-bottom: 16px; }
+.empty-state h3 { font-size: 1.25rem; font-weight: 600; color: var(--text-primary, #1f2937); margin-bottom: 8px; }
+.empty-state p { color: var(--text-muted, #6b7280); margin-bottom: 24px; }
+.source-buttons { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.source-btn {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 16px 24px; border: 2px solid var(--border-color, #e5e7eb);
+    border-radius: 12px; background: var(--bg-secondary, #fff);
+    color: var(--text-primary, #1f2937); text-decoration: none;
+    transition: all 0.2s; min-width: 140px;
+}
+.source-btn:hover { border-color: #3b82f6; background: rgba(59, 130, 246, 0.05); color: #3b82f6; }
+.source-btn i { font-size: 1.75rem; margin-bottom: 8px; }
+.source-btn span { font-size: 0.9rem; font-weight: 500; }
 
 /* Dark mode */
-[data-theme="dark"] .log-card {
-    border-color: #374151;
-    background: #1f2937;
-}
-
-[data-theme="dark"] .log-card:hover {
-    border-color: #3b82f6;
-}
-
-[data-theme="dark"] .source-btn {
-    border-color: #374151;
-    background: #1f2937;
-}
-
-[data-theme="dark"] .source-btn:hover {
-    background: rgba(59, 130, 246, 0.1);
-}
+[data-theme="dark"] .log-table thead th { background: #1e293b; border-color: #374151; color: #94a3b8; }
+[data-theme="dark"] .log-table thead th:hover { background: #253347; color: #e2e8f0; }
+[data-theme="dark"] .log-table tbody tr { border-color: #1f2937; }
+[data-theme="dark"] .log-table tbody tr:hover { background: rgba(59, 130, 246, 0.08); }
+[data-theme="dark"] .log-table-container { border-color: #374151; }
+[data-theme="dark"] .filter-bar { background: #1e293b; border-color: #374151; }
+[data-theme="dark"] .source-btn { border-color: #374151; background: #1f2937; }
+[data-theme="dark"] .source-btn:hover { background: rgba(59, 130, 246, 0.1); }
 </style>
 {% endblock %}
 
@@ -219,66 +251,159 @@
 <!-- Stats summary -->
 <div class="stats-bar">
     <div class="stat-item">
-        <span class="stat-value">{{ log_files|length }}</span>
+        <span class="stat-value" id="statLogs">{{ log_files|length }}</span>
         <span class="stat-label">Logs</span>
     </div>
     <div class="stat-item">
-        <span class="stat-value text-danger">{{ total_errors }}</span>
+        <span class="stat-value text-danger" id="statErrors">{{ total_errors }}</span>
         <span class="stat-label">Errors</span>
     </div>
     <div class="stat-item">
-        <span class="stat-value text-warning">{{ total_warnings }}</span>
+        <span class="stat-value text-warning" id="statWarnings">{{ total_warnings }}</span>
         <span class="stat-label">Warnings</span>
     </div>
 </div>
 
-<!-- Log files grid -->
-<div class="row g-3">
-    {% for file in log_files %}
-    <div class="col-md-6 col-lg-4">
-        <div class="card log-card h-100">
-            <a href="{{ url_for('main.view_log', file_id=file.id) }}" class="card-body text-decoration-none">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div class="log-name text-truncate" title="{{ file.original_filename }}">
-                        {{ file.original_filename }}
-                    </div>
-                    {% if file.parsed %}
-                    <span class="badge bg-success-subtle text-success">Ready</span>
-                    {% else %}
-                    <span class="badge bg-secondary-subtle text-secondary">Pending</span>
-                    {% endif %}
-                </div>
-                <div class="log-meta">
-                    {{ (file.file_size / 1024)|round(1) }} KB &middot;
-                    {{ file.upload_date.strftime('%b %d, %H:%M') if file.upload_date else 'Unknown' }}
-                </div>
-                <div class="log-stats">
-                    <span class="stat lines">
-                        <i class="bi bi-list-ol"></i>{{ file.total_lines|default(0) }}
-                    </span>
-                    <span class="stat errors">
-                        <i class="bi bi-x-circle-fill"></i>{{ file.error_count }}
-                    </span>
-                    <span class="stat warnings">
-                        <i class="bi bi-exclamation-triangle-fill"></i>{{ file.warning_count }}
-                    </span>
-                </div>
-            </a>
-            <div class="card-footer bg-transparent border-0 pt-0 pb-3 px-3">
-                <div class="btn-group btn-group-sm w-100">
-                    <a href="{{ url_for('main.view_log', file_id=file.id) }}" class="btn btn-outline-primary flex-fill" title="View">
-                        <i class="bi bi-eye me-1"></i>View
-                    </a>
-                    <form action="{{ url_for('main.delete_log', file_id=file.id) }}" method="post" class="d-inline" onsubmit="return confirm('Delete this log?');">
-                        <button type="submit" class="btn btn-outline-danger" title="Delete">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                    </form>
-                </div>
-            </div>
+<!-- Filter bar -->
+<div class="filter-bar">
+    <div class="filter-group">
+        <i class="bi bi-search text-muted"></i>
+        <input type="text" class="form-control form-control-sm" id="filterSearch" placeholder="Search filename..." style="width: 180px;" oninput="applyFilters()">
+    </div>
+    <div class="filter-group">
+        <span class="filter-label"><i class="bi bi-cpu me-1"></i>Device:</span>
+        <select class="form-select form-select-sm" id="filterSerial" onchange="applyFilters()">
+            <option value="">All devices</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <span class="filter-label">Type:</span>
+        <div class="btn-group btn-group-sm" role="group">
+            <button type="button" class="btn btn-outline-secondary filter-type active" data-value="all" onclick="setFilter(this)">All</button>
+            <button type="button" class="btn btn-outline-secondary filter-type" data-value="log" onclick="setFilter(this)">.log</button>
+            <button type="button" class="btn btn-outline-secondary filter-type" data-value="db" onclick="setFilter(this)">.db</button>
         </div>
     </div>
-    {% endfor %}
+    <div class="filter-group">
+        <span class="filter-label"><i class="bi bi-calendar3 me-1"></i>Date:</span>
+        <input type="date" class="form-control form-control-sm" id="filterDateFrom" onchange="applyFilters()" title="From date" style="width: 130px;">
+        <span class="text-muted" style="font-size: 0.75rem;">to</span>
+        <input type="date" class="form-control form-control-sm" id="filterDateTo" onchange="applyFilters()" title="To date" style="width: 130px;">
+    </div>
+    <div class="filter-group">
+        <div class="form-check form-check-inline mb-0">
+            <input class="form-check-input" type="checkbox" id="filterErrors" onchange="applyFilters()">
+            <label class="form-check-label" for="filterErrors" style="font-size: 0.82rem;">Errors only</label>
+        </div>
+    </div>
+    <!-- Group toggle -->
+    <div class="filter-group">
+        <span class="filter-label">Group:</span>
+        <div class="btn-group btn-group-sm" role="group">
+            <button type="button" class="btn btn-outline-secondary group-mode active" data-value="date" onclick="setGroupMode(this)">
+                <i class="bi bi-calendar3 me-1"></i>Date
+            </button>
+            <button type="button" class="btn btn-outline-secondary group-mode" data-value="device" onclick="setGroupMode(this)">
+                <i class="bi bi-cpu me-1"></i>Device
+            </button>
+            <button type="button" class="btn btn-outline-secondary group-mode" data-value="none" onclick="setGroupMode(this)">
+                None
+            </button>
+        </div>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary" id="btnClearFilters" onclick="clearFilters()" style="display: none;" title="Clear all filters">
+        <i class="bi bi-x-lg"></i>
+    </button>
+    <span class="filter-count" id="filterCount"></span>
+</div>
+
+<!-- Log table -->
+<div class="log-table-container">
+    <table class="log-table" id="logTable">
+        <thead>
+            <tr>
+                <th onclick="sortTable('name')" id="thName">
+                    Filename <i class="bi bi-chevron-expand sort-icon"></i>
+                </th>
+                <th onclick="sortTable('serial')" id="thSerial" style="width: 150px;">
+                    Device <i class="bi bi-chevron-expand sort-icon"></i>
+                </th>
+                <th onclick="sortTable('date')" id="thDate" class="sorted" style="width: 130px;">
+                    Date <i class="bi bi-chevron-down sort-icon"></i>
+                </th>
+                <th onclick="sortTable('size')" id="thSize" style="width: 80px; text-align: right;">
+                    Size <i class="bi bi-chevron-expand sort-icon"></i>
+                </th>
+                <th onclick="sortTable('errors')" id="thErrors" style="width: 180px;">
+                    Issues <i class="bi bi-chevron-expand sort-icon"></i>
+                </th>
+                <th style="width: 50px;"></th>
+            </tr>
+        </thead>
+        <tbody id="logTableBody">
+            {% for file in log_files %}
+            {% set info = file.device_info|from_json %}
+            {% set file_serial_info = info.get('serial_number', '') if info else '' %}
+            {% if not file_serial_info and file.original_filename.startswith('S3: ') and '/' in file.original_filename %}
+            {% set file_serial = file.original_filename[4:].split('/')[0] %}
+            {% else %}
+            {% set file_serial = file_serial_info %}
+            {% endif %}
+            {% set file_type = 'db' if file.original_filename.endswith('.db') else 'log' %}
+            <tr class="log-row"
+                data-id="{{ file.id }}"
+                data-filename="{{ file.original_filename|lower }}"
+                data-original-name="{{ file.original_filename }}"
+                data-serial="{{ file_serial }}"
+                data-type="{{ file_type }}"
+                data-date="{{ file.upload_date.strftime('%Y-%m-%d') if file.upload_date else '' }}"
+                data-datetime="{{ file.upload_date.isoformat() if file.upload_date else '' }}"
+                data-size="{{ file.file_size or 0 }}"
+                data-errors="{{ file.error_count }}"
+                data-warnings="{{ file.warning_count }}"
+                data-name-sort="{{ file.original_filename|lower }}">
+                <td class="col-name">
+                    <a href="{{ url_for('main.view_log', file_id=file.id) }}" class="file-link">
+                        {% if file_type == 'db' %}
+                        <i class="bi bi-database text-info"></i>
+                        {% else %}
+                        <i class="bi bi-file-text text-muted"></i>
+                        {% endif %}
+                        <span class="fname" title="{{ file.original_filename }}">{{ file.original_filename }}</span>
+                    </a>
+                </td>
+                <td class="col-serial">
+                    {% if file_serial %}
+                    <span class="serial-badge">{{ file_serial }}</span>
+                    {% else %}
+                    <span class="text-muted" style="font-size: 0.78rem;">-</span>
+                    {% endif %}
+                </td>
+                <td class="col-date">
+                    {{ file.upload_date.strftime('%b %d, %H:%M') if file.upload_date else '-' }}
+                </td>
+                <td class="col-size">
+                    {{ (file.file_size / 1024)|round(1) if file.file_size else 0 }} KB
+                </td>
+                <td class="col-stats">
+                    <span class="stat-pill errors {{ 'zero' if file.error_count == 0 else '' }}">
+                        <i class="bi bi-x-circle-fill"></i>{{ file.error_count }}
+                    </span>
+                    <span class="stat-pill warnings {{ 'zero' if file.warning_count == 0 else '' }}">
+                        <i class="bi bi-exclamation-triangle-fill"></i>{{ file.warning_count }}
+                    </span>
+                </td>
+                <td class="col-actions">
+                    <form action="{{ url_for('main.delete_log', file_id=file.id) }}" method="post" class="d-inline" onsubmit="return confirm('Delete this log?');">
+                        <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="Delete">
+                            <i class="bi bi-trash" style="font-size: 0.75rem;"></i>
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 
 {% else %}
@@ -306,5 +431,326 @@
         </a>
     </div>
 </div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if log_files %}
+<script>
+const totalLogs = {{ log_files|length }};
+const totalErrors = {{ total_errors }};
+const totalWarnings = {{ total_warnings }};
+let currentSort = { col: 'date', dir: 'desc' };
+let groupMode = 'date'; // 'date', 'device', 'none'
+const collapsedGroups = new Set();
+
+// ============================================
+// Date+time extraction from filename
+// ============================================
+function extractFileDate(originalName) {
+    // Pattern 1: "YYYY-MM-DD_HH-MM" in filename (e.g., syslog-2026-02-09_09-27-boot.log or S3 folder 2026-02-09_09-27/)
+    let m = originalName.match(/(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})/);
+    if (m) return `${m[1]}T${m[2]}:${m[3]}`;
+
+    // Pattern 2: YYYYMMDD_HHMMSS in filename (e.g., s3_SERIAL_name_20240115_143025.log)
+    m = originalName.match(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}`;
+
+    // Pattern 3: YYYY-MM-DD_HH:MM or YYYY-MM-DDTHH:MM anywhere
+    m = originalName.match(/(\d{4}-\d{2}-\d{2})[T_](\d{2}):(\d{2})/);
+    if (m) return `${m[1]}T${m[2]}:${m[3]}`;
+
+    // Pattern 4: YYYY-MM-DD only (no time)
+    m = originalName.match(/(\d{4}-\d{2}-\d{2})/);
+    if (m) return m[1];
+
+    return '';
+}
+
+function formatDateLabel(dateTimeStr) {
+    if (!dateTimeStr) return 'Unknown date';
+    try {
+        // Has time component (contains T)
+        if (dateTimeStr.includes('T')) {
+            const [datePart, timePart] = dateTimeStr.split('T');
+            const d = new Date(datePart + 'T00:00:00');
+            const dateOptions = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
+            const dateLabel = d.toLocaleDateString('en-US', dateOptions);
+            return `${dateLabel}, ${timePart}`;
+        }
+        // Date only
+        const d = new Date(dateTimeStr + 'T00:00:00');
+        const options = { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' };
+        return d.toLocaleDateString('en-US', options);
+    } catch {
+        return dateTimeStr;
+    }
+}
+
+// ============================================
+// Init
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    // Extract file dates and store as data attribute
+    document.querySelectorAll('.log-row').forEach(row => {
+        const origName = row.dataset.originalName || '';
+        const fileDate = extractFileDate(origName);
+        row.dataset.filedate = fileDate;
+    });
+
+    // Populate serial dropdown
+    const serials = new Set();
+    document.querySelectorAll('.log-row').forEach(row => {
+        const serial = row.dataset.serial;
+        if (serial) serials.add(serial);
+    });
+    const select = document.getElementById('filterSerial');
+    Array.from(serials).sort().forEach(sn => {
+        const opt = document.createElement('option');
+        opt.value = sn;
+        opt.textContent = sn;
+        select.appendChild(opt);
+    });
+    if (serials.size === 0) {
+        select.closest('.filter-group').style.display = 'none';
+    }
+
+    // Initial render
+    renderTable();
+});
+
+// ============================================
+// Filtering
+// ============================================
+function setFilter(btn) {
+    btn.closest('.btn-group').querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilters();
+}
+
+function setGroupMode(btn) {
+    btn.closest('.btn-group').querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    groupMode = btn.dataset.value;
+    collapsedGroups.clear();
+    renderTable();
+}
+
+function applyFilters() {
+    const search = document.getElementById('filterSearch').value.toLowerCase().trim();
+    const type = document.querySelector('.filter-type.active')?.dataset.value || 'all';
+    const serial = document.getElementById('filterSerial').value;
+    const dateFrom = document.getElementById('filterDateFrom').value;
+    const dateTo = document.getElementById('filterDateTo').value;
+    const errorsOnly = document.getElementById('filterErrors').checked;
+
+    document.querySelectorAll('.log-row').forEach(row => {
+        let show = true;
+        if (search && !row.dataset.filename.includes(search)) show = false;
+        if (type !== 'all' && row.dataset.type !== type) show = false;
+        if (serial && row.dataset.serial !== serial) show = false;
+        // Use filedate from filename for date filtering, fallback to upload date
+        // Extract just the date part (YYYY-MM-DD) for comparison with date inputs
+        const rawDate = row.dataset.filedate || row.dataset.date;
+        const rowDateOnly = rawDate ? rawDate.substring(0, 10) : '';
+        if (dateFrom && rowDateOnly < dateFrom) show = false;
+        if (dateTo && rowDateOnly > dateTo) show = false;
+        if (errorsOnly && parseInt(row.dataset.errors) === 0) show = false;
+        row.dataset.visible = show ? '1' : '0';
+    });
+
+    renderTable();
+    updateStats();
+}
+
+function clearFilters() {
+    document.getElementById('filterSearch').value = '';
+    document.getElementById('filterSerial').value = '';
+    document.getElementById('filterDateFrom').value = '';
+    document.getElementById('filterDateTo').value = '';
+    document.getElementById('filterErrors').checked = false;
+    document.querySelectorAll('.filter-type').forEach(b => b.classList.remove('active'));
+    document.querySelector('.filter-type[data-value="all"]').classList.add('active');
+    applyFilters();
+}
+
+function updateStats() {
+    let shown = 0, filteredErrors = 0, filteredWarnings = 0;
+    document.querySelectorAll('.log-row').forEach(row => {
+        if (row.dataset.visible !== '0') {
+            shown++;
+            filteredErrors += parseInt(row.dataset.errors) || 0;
+            filteredWarnings += parseInt(row.dataset.warnings) || 0;
+        }
+    });
+
+    const isFiltered = shown < totalLogs;
+    document.getElementById('filterCount').innerHTML = isFiltered
+        ? `<span class="active-count">${shown}</span> of ${totalLogs} logs` : '';
+    document.getElementById('btnClearFilters').style.display = isFiltered ? '' : 'none';
+    document.getElementById('statLogs').textContent = shown;
+    document.getElementById('statErrors').textContent = filteredErrors;
+    document.getElementById('statWarnings').textContent = filteredWarnings;
+}
+
+// ============================================
+// Sorting
+// ============================================
+function sortTable(col) {
+    if (currentSort.col === col) {
+        currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort.col = col;
+        currentSort.dir = (col === 'date' || col === 'errors' || col === 'size') ? 'desc' : 'asc';
+    }
+
+    // Update header icons
+    document.querySelectorAll('.log-table thead th').forEach(th => {
+        th.classList.remove('sorted');
+        const icon = th.querySelector('.sort-icon');
+        if (icon) icon.className = 'bi bi-chevron-expand sort-icon';
+    });
+    const thId = 'th' + col.charAt(0).toUpperCase() + col.slice(1);
+    const th = document.getElementById(thId);
+    if (th) {
+        th.classList.add('sorted');
+        const icon = th.querySelector('.sort-icon');
+        if (icon) icon.className = `bi bi-chevron-${currentSort.dir === 'asc' ? 'up' : 'down'} sort-icon`;
+    }
+
+    renderTable();
+}
+
+function getSortValue(row) {
+    switch (currentSort.col) {
+        case 'name': return row.dataset.nameSort || '';
+        case 'serial': return row.dataset.serial || '';
+        case 'date': return row.dataset.filedate || row.dataset.datetime || '';
+        case 'size': return parseInt(row.dataset.size) || 0;
+        case 'errors': return parseInt(row.dataset.errors) || 0;
+        default: return '';
+    }
+}
+
+// ============================================
+// Grouping & Rendering
+// ============================================
+function toggleGroup(key) {
+    if (collapsedGroups.has(key)) {
+        collapsedGroups.delete(key);
+    } else {
+        collapsedGroups.add(key);
+    }
+    renderTable();
+}
+
+function renderTable() {
+    const tbody = document.getElementById('logTableBody');
+    const rows = Array.from(document.querySelectorAll('.log-row'));
+
+    // Sort rows
+    const dir = currentSort.dir === 'asc' ? 1 : -1;
+    const isNumeric = ['size', 'errors'].includes(currentSort.col);
+
+    rows.sort((a, b) => {
+        const va = getSortValue(a);
+        const vb = getSortValue(b);
+        if (isNumeric) return (va - vb) * dir;
+        return String(va).localeCompare(String(vb)) * dir;
+    });
+
+    // Remove existing group headers
+    tbody.querySelectorAll('.group-header').forEach(el => el.remove());
+
+    if (groupMode === 'none') {
+        // Flat mode
+        tbody.innerHTML = '';
+        rows.forEach(row => {
+            row.style.display = row.dataset.visible === '0' ? 'none' : '';
+            tbody.appendChild(row);
+        });
+        return;
+    }
+
+    // Group by date or device
+    const groups = new Map();
+    rows.forEach(row => {
+        let key;
+        if (groupMode === 'date') {
+            key = row.dataset.filedate || row.dataset.date || '__nodate__';
+        } else {
+            key = row.dataset.serial || '__none__';
+        }
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(row);
+    });
+
+    // Sort groups
+    const sortedGroups = Array.from(groups.entries()).sort((a, b) => {
+        const noneKeys = ['__none__', '__nodate__'];
+        if (noneKeys.includes(a[0])) return 1;
+        if (noneKeys.includes(b[0])) return -1;
+        // Dates: most recent first; devices: alphabetical
+        if (groupMode === 'date') return b[0].localeCompare(a[0]);
+        return a[0].localeCompare(b[0]);
+    });
+
+    // Clear and rebuild
+    tbody.innerHTML = '';
+    sortedGroups.forEach(([key, groupRows]) => {
+        const visibleRows = groupRows.filter(r => r.dataset.visible !== '0');
+        if (visibleRows.length === 0) return;
+
+        const isCollapsed = collapsedGroups.has(key);
+        const errSum = visibleRows.reduce((s, r) => s + (parseInt(r.dataset.errors) || 0), 0);
+        const warnSum = visibleRows.reduce((s, r) => s + (parseInt(r.dataset.warnings) || 0), 0);
+
+        // Build label and icon based on group mode
+        let label, icon;
+        let dateKey = '';
+        if (groupMode === 'date') {
+            label = key === '__nodate__' ? 'Unknown date' : formatDateLabel(key);
+            dateKey = (key !== '__nodate__') ? `<span class="group-date-key">${escapeHtml(key)}</span>` : '';
+            icon = '<i class="bi bi-folder2-open me-1 text-warning"></i>';
+        } else {
+            label = key === '__none__' ? 'Other (no device)' : key;
+            icon = '<i class="bi bi-cpu me-1 text-primary"></i>';
+        }
+
+        const safeKey = key.replace(/'/g, "\\'");
+
+        // Group header row
+        const headerRow = document.createElement('tr');
+        headerRow.className = 'group-header';
+        headerRow.innerHTML = `<td colspan="6" onclick="toggleGroup('${safeKey}')">
+            <i class="bi bi-chevron-down group-toggle ${isCollapsed ? 'collapsed' : ''}"></i>
+            ${icon}
+            ${escapeHtml(label)}${dateKey || ''}
+            <span class="group-count">${visibleRows.length} file${visibleRows.length !== 1 ? 's' : ''}
+                ${errSum > 0 ? `&nbsp;&middot;&nbsp;<span class="text-danger">${errSum} errors</span>` : ''}
+                ${warnSum > 0 ? `&nbsp;&middot;&nbsp;<span class="text-warning">${warnSum} warnings</span>` : ''}
+            </span>
+        </td>`;
+        tbody.appendChild(headerRow);
+
+        visibleRows.forEach(row => {
+            row.style.display = isCollapsed ? 'none' : '';
+            tbody.appendChild(row);
+        });
+
+        // Hide non-visible rows too
+        groupRows.filter(r => r.dataset.visible === '0').forEach(row => {
+            row.style.display = 'none';
+            tbody.appendChild(row);
+        });
+    });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
 {% endif %}
 {% endblock %}

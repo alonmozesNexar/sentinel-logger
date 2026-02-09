@@ -963,8 +963,28 @@ async function downloadWithProgress(fileKey, serialNumber, saveOnly) {
         }
 
         const fileId = response.headers.get('X-File-Id');
+        const isDuplicate = response.headers.get('X-Duplicate') === 'true';
         const contentLength = response.headers.get('X-Total-Size') || response.headers.get('Content-Length') || totalSize;
         const total = parseInt(contentLength) || totalSize;
+
+        // If duplicate, skip the download stream and just report it
+        if (isDuplicate) {
+            // Consume the response body to avoid connection issues
+            await response.body.cancel();
+
+            if (!saveOnly) {
+                setDownloadStatus('complete', 'Already downloaded');
+                document.getElementById('cancelDownloadBtn').style.display = 'none';
+                document.getElementById('closeDownloadBtn').style.display = 'inline-block';
+                document.getElementById('viewLogsBtn').style.display = 'inline-block';
+                document.getElementById('timeLeft').textContent = 'Skipped';
+                showStatus(`<i class="bi bi-info-circle me-2"></i>${filename} already downloaded, skipped`, 'info');
+                setTimeout(hideStatus, 5000);
+            }
+
+            currentDownloadController = null;
+            return { success: true, fileId: fileId, filename: filename, skipped: true };
+        }
 
         const reader = response.body.getReader();
         const chunks = [];
@@ -1105,7 +1125,11 @@ async function downloadSelected() {
         results.push(result);
 
         // Update batch file status
-        if (result.success) {
+        if (result.success && result.skipped) {
+            document.getElementById(`batchIcon${i}`).className = 'bi bi-skip-forward-fill text-info';
+            document.getElementById(`batchStatus${i}`).className = 'badge bg-info';
+            document.getElementById(`batchStatus${i}`).textContent = 'Already exists';
+        } else if (result.success) {
             document.getElementById(`batchIcon${i}`).className = 'bi bi-check-circle-fill text-success';
             document.getElementById(`batchStatus${i}`).className = 'badge bg-success';
             document.getElementById(`batchStatus${i}`).textContent = 'Done';
@@ -1117,16 +1141,21 @@ async function downloadSelected() {
     }
 
     // Batch complete
-    const successCount = results.filter(r => r.success).length;
+    const successCount = results.filter(r => r.success && !r.skipped).length;
+    const skippedCount = results.filter(r => r.success && r.skipped).length;
     const failCount = results.filter(r => !r.success).length;
 
     document.getElementById('batchProgressFill').style.width = '100%';
-    document.getElementById('batchCount').textContent = `${successCount} / ${totalFiles} completed`;
+    document.getElementById('batchCount').textContent = `${successCount + skippedCount} / ${totalFiles} completed`;
 
     if (batchDownloadCancelled) {
         setDownloadStatus('error', `Batch cancelled. ${successCount} of ${totalFiles} files downloaded.`);
     } else if (failCount > 0) {
-        setDownloadStatus('complete', `Done! ${successCount} downloaded, ${failCount} failed.`);
+        setDownloadStatus('complete', `Done! ${successCount} downloaded, ${failCount} failed${skippedCount > 0 ? `, ${skippedCount} already existed` : ''}.`);
+    } else if (skippedCount > 0 && successCount === 0) {
+        setDownloadStatus('complete', `All ${skippedCount} files already downloaded.`);
+    } else if (skippedCount > 0) {
+        setDownloadStatus('complete', `${successCount} new files downloaded, ${skippedCount} already existed.`);
     } else {
         setDownloadStatus('complete', `All ${totalFiles} files downloaded successfully!`);
     }
