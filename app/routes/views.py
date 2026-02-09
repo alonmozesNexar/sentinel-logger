@@ -431,10 +431,16 @@ def s3_download_stream():
         # Save to uploads folder and create database record
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         original_name = metadata.get('filename', 'log.txt')
-        filename = f"s3_{serial_number}_{original_name}_{timestamp}"
+
+        # Split name and extension to preserve file type
+        import os as _os
+        name_part, ext_part = _os.path.splitext(original_name)
+        known_extensions = ('.db', '.sqlite', '.json', '.csv', '.txt', '.log')
+        if ext_part.lower() not in known_extensions:
+            ext_part = '.log'
+
+        filename = f"s3_{serial_number}_{name_part}_{timestamp}{ext_part}"
         unique_filename = secure_filename(filename)
-        if not unique_filename.endswith('.log'):
-            unique_filename += '.log'
 
         upload_folder = current_app.config['UPLOAD_FOLDER']
         file_path = upload_folder / unique_filename
@@ -621,11 +627,132 @@ def s3_refresh():
     return jsonify(s3.get_status())
 
 
+@main_bp.route('/db/<int:file_id>')
+def view_db(file_id):
+    """View SQLite database file with table browser"""
+    import sqlite3
+
+    log_file = user_owns_log_file(file_id)
+    file_path = current_app.config['UPLOAD_FOLDER'] / log_file.filename
+
+    if not file_path.exists():
+        flash('Database file not found on disk', 'error')
+        return redirect(url_for('main.index'))
+
+    # Get list of tables
+    tables = []
+    try:
+        conn = sqlite3.connect(str(file_path))
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        table_names = [row[0] for row in cursor.fetchall()]
+
+        for table_name in table_names:
+            cursor.execute(f'SELECT COUNT(*) FROM "{table_name}"')
+            row_count = cursor.fetchone()[0]
+            cursor.execute(f'PRAGMA table_info("{table_name}")')
+            columns = [{'name': col[1], 'type': col[2], 'notnull': bool(col[3]), 'pk': bool(col[5])} for col in cursor.fetchall()]
+            tables.append({
+                'name': table_name,
+                'row_count': row_count,
+                'columns': columns
+            })
+
+        conn.close()
+    except Exception as e:
+        flash(f'Error reading database: {str(e)}', 'error')
+        return redirect(url_for('main.index'))
+
+    # Get selected table (default to first)
+    selected_table = request.args.get('table', tables[0]['name'] if tables else '')
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 100, type=int)
+    search = request.args.get('search', '')
+    sort_col = request.args.get('sort', '')
+    sort_dir = request.args.get('dir', 'asc')
+
+    # Get data for selected table
+    rows = []
+    columns = []
+    total_rows = 0
+    total_pages = 0
+
+    if selected_table:
+        try:
+            conn = sqlite3.connect(str(file_path))
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            # Get columns
+            cursor.execute(f'PRAGMA table_info("{selected_table}")')
+            columns = [col[1] for col in cursor.fetchall()]
+
+            # Build query with optional search
+            where_clause = ''
+            params = []
+            if search:
+                conditions = [f'CAST("{col}" AS TEXT) LIKE ?' for col in columns]
+                where_clause = 'WHERE ' + ' OR '.join(conditions)
+                params = [f'%{search}%'] * len(columns)
+
+            # Count
+            cursor.execute(f'SELECT COUNT(*) FROM "{selected_table}" {where_clause}', params)
+            total_rows = cursor.fetchone()[0]
+            total_pages = max(1, (total_rows + per_page - 1) // per_page)
+            page = min(page, total_pages)
+
+            # Sort
+            order_clause = ''
+            if sort_col and sort_col in columns:
+                direction = 'DESC' if sort_dir == 'desc' else 'ASC'
+                order_clause = f'ORDER BY "{sort_col}" {direction}'
+
+            # Fetch rows
+            offset = (page - 1) * per_page
+            cursor.execute(
+                f'SELECT * FROM "{selected_table}" {where_clause} {order_clause} LIMIT ? OFFSET ?',
+                params + [per_page, offset]
+            )
+            rows = [dict(row) for row in cursor.fetchall()]
+
+            conn.close()
+        except Exception as e:
+            flash(f'Error querying table: {str(e)}', 'warning')
+
+    return render_template('db_viewer.html',
+        log_file=log_file,
+        tables=tables,
+        selected_table=selected_table,
+        columns=columns,
+        rows=rows,
+        page=page,
+        per_page=per_page,
+        total_rows=total_rows,
+        total_pages=total_pages,
+        search=search,
+        sort_col=sort_col,
+        sort_dir=sort_dir
+    )
+
+
 @main_bp.route('/log/<int:file_id>')
 def view_log(file_id):
     """View log entries with filtering and search modes"""
     log_file = user_owns_log_file(file_id)
     file_path = current_app.config['UPLOAD_FOLDER'] / log_file.filename
+
+    # Redirect .db/.sqlite files to the database viewer
+    # Check both internal filename and original filename (S3 downloads may have mangled names)
+    is_db_file = (
+        log_file.filename.endswith('.db') or log_file.filename.endswith('.sqlite') or
+        (log_file.original_filename and (
+            log_file.original_filename.endswith('.db') or
+            log_file.original_filename.endswith('.sqlite') or
+            '.db' in log_file.original_filename.split('/')[-1]
+        ))
+    )
+    if is_db_file:
+        return redirect(url_for('main.view_db', file_id=file_id))
 
     # Parse file if not already parsed
     if not log_file.parsed and file_path.exists():
@@ -667,7 +794,7 @@ def view_log(file_id):
     search = request.args.get('search', '')
     search_mode = request.args.get('search_mode', 'contains')  # contains, regex, exact
     page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 100, type=int)
+    per_page = request.args.get('per_page', 1000, type=int)
 
     # Allow unlimited (99999 means all)
     if per_page >= 99999:

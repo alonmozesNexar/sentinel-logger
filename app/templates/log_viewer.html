@@ -875,8 +875,13 @@
             <i class="bi bi-bookmark"></i>
             <span id="bookmarkCount">0</span>
         </button>
-        <button class="toolbar-btn" onclick="copyFilteredLogs()" title="Copy All Visible (Shift+C)">
+        <button class="toolbar-btn" onclick="copyFilteredLogs()" title="Copy Filtered/Visible (Shift+C)">
             <i class="bi bi-clipboard"></i>
+            <span style="font-size: 0.7rem;">Filtered</span>
+        </button>
+        <button class="toolbar-btn" onclick="copyEntireLog()" title="Copy Entire Log (Shift+A)" id="copyEntireLogBtn">
+            <i class="bi bi-files"></i>
+            <span style="font-size: 0.7rem;">Entire Log</span>
         </button>
         <div class="dropdown d-inline">
             <button class="toolbar-btn dropdown-toggle" data-bs-toggle="dropdown" title="Export">
@@ -1150,6 +1155,31 @@ function copySelectedEntries() {
     document.querySelectorAll('.log-entry.selected').forEach(e => lines.push(e.dataset.raw));
     copyToClipboard(lines.join('\n'));
     showCopyToast(`Copied ${lines.length} lines!`);
+}
+
+async function copyEntireLog() {
+    const btn = document.getElementById('copyEntireLogBtn');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`/api/log-files/${viewerState.fileId}/raw`);
+        if (!response.ok) throw new Error('Failed to fetch log');
+
+        const data = await response.json();
+        const content = data.content || '';
+        const totalLines = data.total_lines || content.split('\n').length;
+
+        await navigator.clipboard.writeText(content);
+        showCopyToast(`Copied entire log (${totalLines} lines)!`);
+    } catch (err) {
+        showCopyToast('Failed to copy entire log');
+        console.error('Copy entire log failed:', err);
+    } finally {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    }
 }
 
 // ============================================
@@ -1792,6 +1822,7 @@ document.addEventListener('keydown', function(e) {
     }
     if (e.key === 'c' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); copySelectedEntries(); }
     if (e.key === 'C' && e.shiftKey) { e.preventDefault(); copyFilteredLogs(); }
+    if (e.key === 'A' && e.shiftKey) { e.preventDefault(); copyEntireLog(); }
     if (e.key === 'e') filterBySeverity('ERROR');
     if (e.key === 'w') filterBySeverity('WARNING');
     if (e.key === 'a') filterBySeverity('');
@@ -1837,7 +1868,8 @@ function showShortcutsHelp() {
                                 <h6>Actions</h6>
                                 <table class="table table-sm"><tbody>
                                     <tr><td><kbd>c</kbd></td><td>Copy selected</td></tr>
-                                    <tr><td><kbd>Shift+C</kbd></td><td>Copy all visible</td></tr>
+                                    <tr><td><kbd>Shift+C</kbd></td><td>Copy filtered/visible</td></tr>
+                                    <tr><td><kbd>Shift+A</kbd></td><td>Copy entire log</td></tr>
                                     <tr><td><kbd>b</kbd></td><td>Bookmarks panel</td></tr>
                                     <tr><td><kbd>m</kbd></td><td>Toggle minimap</td></tr>
                                     <tr><td><kbd>Alt+Z</kbd></td><td>Toggle wrap</td></tr>

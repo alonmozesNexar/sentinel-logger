@@ -347,10 +347,18 @@
                             <option value="0">All Time</option>
                         </select>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Filter by Folder</label>
                         <div id="dateFilters" class="border rounded p-2" style="min-height: 38px; max-height: 80px; overflow-y: auto;">
                             <span class="text-muted small">Search to see available folders</span>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">File Type</label>
+                        <div class="btn-group-vertical w-100" role="group">
+                            <button class="btn btn-sm btn-outline-secondary active" onclick="filterByType('all')" id="filterAll">All</button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="filterByType('log')" id="filterLog"><i class="bi bi-file-text me-1"></i>Logs</button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="filterByType('db')" id="filterDb"><i class="bi bi-database me-1"></i>DB</button>
                         </div>
                     </div>
                 </div>
@@ -503,6 +511,18 @@
             </div>
         </div>
 
+        <!-- Batch progress (shown for multi-file downloads) -->
+        <div id="batchProgress" class="mb-3" style="display: none;">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="text-muted small">Batch Progress</span>
+                <span class="badge bg-primary" id="batchCount">0 / 0</span>
+            </div>
+            <div class="progress" style="height: 6px;">
+                <div id="batchProgressFill" class="progress-bar bg-success" style="width: 0%;"></div>
+            </div>
+            <div id="batchFileList" class="mt-2" style="max-height: 120px; overflow-y: auto; font-size: 0.8rem;"></div>
+        </div>
+
         <div class="download-progress-bar">
             <div id="downloadProgressFill" class="download-progress-fill" style="width: 0%;">
                 <span id="downloadProgressText">0%</span>
@@ -540,6 +560,9 @@
             <button id="closeDownloadBtn" class="btn btn-primary" onclick="closeDownloadModal()" style="display: none;">
                 <i class="bi bi-check-circle me-1"></i>Done
             </button>
+            <a id="viewLogsBtn" class="btn btn-success" href="/" style="display: none;">
+                <i class="bi bi-eye me-1"></i>View in Logs
+            </a>
         </div>
     </div>
 </div>
@@ -561,7 +584,9 @@ let allFiles = [];
 let selectedFiles = new Set();
 let availableDates = [];
 let currentDateFilter = '';
+let currentTypeFilter = 'all';
 let isLoading = false;
+let batchDownloadCancelled = false;
 
 function showStatus(message, type) {
     const el = document.getElementById('statusMessage');
@@ -661,11 +686,32 @@ function filterByDate(date) {
     renderFiles();
 }
 
-function renderFiles() {
-    const container = document.getElementById('fileList');
-    const filteredFiles = currentDateFilter
+function filterByType(type) {
+    currentTypeFilter = type;
+    // Update button active states
+    document.getElementById('filterAll').classList.toggle('active', type === 'all');
+    document.getElementById('filterLog').classList.toggle('active', type === 'log');
+    document.getElementById('filterDb').classList.toggle('active', type === 'db');
+    renderFiles();
+}
+
+function getFilteredFiles() {
+    let files = currentDateFilter
         ? allFiles.filter(f => f.date === currentDateFilter)
         : allFiles;
+
+    if (currentTypeFilter === 'log') {
+        files = files.filter(f => !f.filename.endsWith('.db') && !f.filename.endsWith('.sqlite'));
+    } else if (currentTypeFilter === 'db') {
+        files = files.filter(f => f.filename.endsWith('.db') || f.filename.endsWith('.sqlite'));
+    }
+
+    return files;
+}
+
+function renderFiles() {
+    const container = document.getElementById('fileList');
+    const filteredFiles = getFilteredFiles();
 
     if (filteredFiles.length === 0) {
         container.innerHTML = '<div class="text-center py-4 text-muted">No files match the selected filter</div>';
@@ -706,7 +752,9 @@ function renderFiles() {
 
         files.forEach((file) => {
             const isSelected = selectedFiles.has(file.key);
-            const icon = file.filename.endsWith('.gz') ? 'bi-file-zip' : 'bi-file-text';
+            let icon = 'bi-file-text';
+            if (file.filename.endsWith('.gz')) icon = 'bi-file-zip';
+            else if (file.filename.endsWith('.db') || file.filename.endsWith('.sqlite')) icon = 'bi-database';
 
             html += `
                 <div class="file-item ${isSelected ? 'selected' : ''}" onclick="toggleFile('${file.key}')" style="padding-left: 40px;">
@@ -761,9 +809,7 @@ function toggleFile(fileKey) {
 }
 
 function toggleSelectAll() {
-    const filteredFiles = currentDateFilter
-        ? allFiles.filter(f => f.date === currentDateFilter)
-        : allFiles;
+    const filteredFiles = getFilteredFiles();
 
     const selectAllCheckbox = document.getElementById('selectAll');
 
@@ -844,15 +890,18 @@ function setDownloadStatus(status, text) {
 
 function closeDownloadModal() {
     document.getElementById('downloadModal').style.display = 'none';
+    document.getElementById('batchProgress').style.display = 'none';
+    document.getElementById('viewLogsBtn').style.display = 'none';
+    batchDownloadCancelled = false;
 }
 
 function cancelDownload() {
+    batchDownloadCancelled = true;
     if (currentDownloadController) {
         currentDownloadController.abort();
         currentDownloadController = null;
     }
     setDownloadStatus('error', 'Download cancelled');
-    setTimeout(closeDownloadModal, 1000);
 }
 
 function formatBytes(bytes) {
@@ -869,12 +918,24 @@ function formatTime(seconds) {
     return Math.round(seconds / 3600) + 'h ' + Math.round((seconds % 3600) / 60) + 'm';
 }
 
-async function downloadWithProgress(fileKey, serialNumber) {
+async function downloadWithProgress(fileKey, serialNumber, saveOnly) {
     const filename = fileKey.split('/').pop();
     const fileInfo = allFiles.find(f => f.key === fileKey);
     const totalSize = fileInfo ? fileInfo.size : 0;
 
-    showDownloadModal(filename, totalSize);
+    if (!saveOnly) {
+        showDownloadModal(filename, totalSize);
+    } else {
+        // Update modal for current file in batch
+        document.getElementById('downloadFilename').textContent = filename;
+        document.getElementById('totalSize').textContent = formatBytes(totalSize);
+        document.getElementById('downloadedSize').textContent = '0 KB';
+        document.getElementById('downloadProgressFill').style.width = '0%';
+        document.getElementById('downloadProgressText').textContent = '0%';
+        document.getElementById('downloadSpeed').textContent = '-- KB/s';
+        document.getElementById('timeLeft').textContent = 'Calculating...';
+    }
+
     downloadStartTime = Date.now();
     currentDownloadController = new AbortController();
 
@@ -893,7 +954,6 @@ async function downloadWithProgress(fileKey, serialNumber) {
         });
 
         if (!response.ok) {
-            // Try to get error message from JSON response
             const contentType = response.headers.get('Content-Type');
             if (contentType && contentType.includes('application/json')) {
                 const errorData = await response.json();
@@ -902,6 +962,7 @@ async function downloadWithProgress(fileKey, serialNumber) {
             throw new Error('Download failed: ' + response.statusText);
         }
 
+        const fileId = response.headers.get('X-File-Id');
         const contentLength = response.headers.get('X-Total-Size') || response.headers.get('Content-Length') || totalSize;
         const total = parseInt(contentLength) || totalSize;
 
@@ -918,7 +979,6 @@ async function downloadWithProgress(fileKey, serialNumber) {
             chunks.push(value);
             downloaded += value.length;
 
-            // Calculate speed
             const now = Date.now();
             const timeDiff = (now - lastTime) / 1000;
             if (timeDiff >= 0.5) {
@@ -929,48 +989,60 @@ async function downloadWithProgress(fileKey, serialNumber) {
             }
         }
 
-        // Combine chunks and trigger download
-        setDownloadStatus('processing', 'Processing file...');
-        const blob = new Blob(chunks);
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename.replace('.gz', '');  // Remove .gz if decompressed
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        // Show complete
+        // Final progress update
         updateDownloadProgress(total, total, 0);
-        setDownloadStatus('complete', 'Download complete!');
-        document.getElementById('cancelDownloadBtn').style.display = 'none';
-        document.getElementById('closeDownloadBtn').style.display = 'inline-block';
-        document.getElementById('timeLeft').textContent = 'Done!';
 
-        showStatus(`<i class="bi bi-check-circle me-2"></i>Downloaded ${filename} successfully`, 'success');
-        setTimeout(hideStatus, 5000);
+        if (!saveOnly) {
+            // Single file: also trigger browser download
+            setDownloadStatus('processing', 'Processing file...');
+            const blob = new Blob(chunks);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename.replace('.gz', '');
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            setDownloadStatus('complete', 'Download complete!');
+            document.getElementById('cancelDownloadBtn').style.display = 'none';
+            document.getElementById('closeDownloadBtn').style.display = 'inline-block';
+            document.getElementById('viewLogsBtn').style.display = 'inline-block';
+            document.getElementById('timeLeft').textContent = 'Done!';
+
+            showStatus(`<i class="bi bi-check-circle me-2"></i>Downloaded ${filename} successfully`, 'success');
+            setTimeout(hideStatus, 5000);
+        }
+
+        currentDownloadController = null;
+        return { success: true, fileId: fileId, filename: filename };
 
     } catch (error) {
+        currentDownloadController = null;
+
         if (error.name === 'AbortError') {
             setDownloadStatus('error', 'Download cancelled');
         } else {
             setDownloadStatus('error', 'Error: ' + error.message);
             showStatus(`<i class="bi bi-x-circle me-2"></i>Download failed: ${error.message}`, 'danger');
         }
-        document.getElementById('cancelDownloadBtn').style.display = 'none';
-        document.getElementById('closeDownloadBtn').style.display = 'inline-block';
-    }
 
-    currentDownloadController = null;
+        if (!saveOnly) {
+            document.getElementById('cancelDownloadBtn').style.display = 'none';
+            document.getElementById('closeDownloadBtn').style.display = 'inline-block';
+        }
+
+        return { success: false, filename: filename, error: error.message };
+    }
 }
 
 function downloadSingleFile(fileKey) {
     const serialNumber = document.getElementById('serial_number').value.trim();
-    downloadWithProgress(fileKey, serialNumber);
+    downloadWithProgress(fileKey, serialNumber, false);
 }
 
-function downloadSelected() {
+async function downloadSelected() {
     if (selectedFiles.size === 0) {
         showStatus('<i class="bi bi-exclamation-circle me-2"></i>Please select at least one file', 'warning');
         return;
@@ -982,15 +1054,89 @@ function downloadSelected() {
         return;
     }
 
-    // Download first selected file with progress
-    const firstFileKey = Array.from(selectedFiles)[0];
+    const fileKeys = Array.from(selectedFiles);
 
-    if (selectedFiles.size > 1) {
-        showStatus(`<i class="bi bi-info-circle me-2"></i>Downloading first file. Multi-file download coming soon!`, 'info');
-        setTimeout(hideStatus, 3000);
+    // Single file - use normal download
+    if (fileKeys.length === 1) {
+        downloadWithProgress(fileKeys[0], serialNumber, false);
+        return;
     }
 
-    downloadWithProgress(firstFileKey, serialNumber);
+    // Multi-file batch download
+    batchDownloadCancelled = false;
+    const totalFiles = fileKeys.length;
+    const results = [];
+
+    // Show modal with batch progress
+    showDownloadModal(fileKeys[0].split('/').pop(), 0);
+    document.getElementById('batchProgress').style.display = 'block';
+    document.getElementById('batchCount').textContent = `0 / ${totalFiles}`;
+    document.getElementById('batchProgressFill').style.width = '0%';
+
+    // Build batch file list HTML
+    let listHtml = '';
+    fileKeys.forEach((key, i) => {
+        const fname = key.split('/').pop();
+        listHtml += `<div id="batchFile${i}" class="d-flex align-items-center gap-2 py-1 px-2" style="border-bottom: 1px solid var(--border-color, #eee);">
+            <i class="bi bi-hourglass text-muted" id="batchIcon${i}"></i>
+            <span class="text-truncate" style="flex: 1;">${fname}</span>
+            <span class="badge bg-secondary" id="batchStatus${i}">Pending</span>
+        </div>`;
+    });
+    document.getElementById('batchFileList').innerHTML = listHtml;
+
+    for (let i = 0; i < totalFiles; i++) {
+        if (batchDownloadCancelled) break;
+
+        const fileKey = fileKeys[i];
+        const fname = fileKey.split('/').pop();
+
+        // Update batch UI
+        document.getElementById('batchCount').textContent = `${i + 1} / ${totalFiles}`;
+        document.getElementById('batchProgressFill').style.width = `${Math.round((i / totalFiles) * 100)}%`;
+        document.getElementById(`batchIcon${i}`).className = 'bi bi-arrow-repeat spin text-primary';
+        document.getElementById(`batchStatus${i}`).className = 'badge bg-primary';
+        document.getElementById(`batchStatus${i}`).textContent = 'Downloading...';
+
+        // Scroll to current file
+        document.getElementById(`batchFile${i}`).scrollIntoView({ block: 'nearest' });
+
+        const result = await downloadWithProgress(fileKey, serialNumber, true);
+        results.push(result);
+
+        // Update batch file status
+        if (result.success) {
+            document.getElementById(`batchIcon${i}`).className = 'bi bi-check-circle-fill text-success';
+            document.getElementById(`batchStatus${i}`).className = 'badge bg-success';
+            document.getElementById(`batchStatus${i}`).textContent = 'Done';
+        } else {
+            document.getElementById(`batchIcon${i}`).className = 'bi bi-x-circle-fill text-danger';
+            document.getElementById(`batchStatus${i}`).className = 'badge bg-danger';
+            document.getElementById(`batchStatus${i}`).textContent = 'Failed';
+        }
+    }
+
+    // Batch complete
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.filter(r => !r.success).length;
+
+    document.getElementById('batchProgressFill').style.width = '100%';
+    document.getElementById('batchCount').textContent = `${successCount} / ${totalFiles} completed`;
+
+    if (batchDownloadCancelled) {
+        setDownloadStatus('error', `Batch cancelled. ${successCount} of ${totalFiles} files downloaded.`);
+    } else if (failCount > 0) {
+        setDownloadStatus('complete', `Done! ${successCount} downloaded, ${failCount} failed.`);
+    } else {
+        setDownloadStatus('complete', `All ${totalFiles} files downloaded successfully!`);
+    }
+
+    document.getElementById('cancelDownloadBtn').style.display = 'none';
+    document.getElementById('closeDownloadBtn').style.display = 'inline-block';
+    document.getElementById('viewLogsBtn').style.display = 'inline-block';
+    document.getElementById('timeLeft').textContent = 'Done!';
+
+    showStatus(`<i class="bi bi-check-circle me-2"></i>${successCount} of ${totalFiles} files downloaded to logs`, 'success');
 }
 
 function formatDate(isoString) {

@@ -1,0 +1,1076 @@
+{% extends "base.html" %}
+
+{% block title %}{{ log_file.original_filename }} - DB Viewer{% endblock %}
+
+{% block extra_css %}
+<style>
+.db-layout {
+    display: flex;
+    gap: 16px;
+    min-height: calc(100vh - 140px);
+}
+
+/* Sidebar - Table List */
+.db-sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    background: var(--bg-secondary, #f8fafc);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    overflow-y: auto;
+}
+
+.db-sidebar-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-muted, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.table-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    cursor: pointer;
+    transition: background 0.15s;
+    text-decoration: none;
+    color: var(--text-primary, #1e293b);
+}
+
+.table-item:hover {
+    background: var(--bg-tertiary, #f1f5f9);
+    color: var(--text-primary, #1e293b);
+}
+
+.table-item.active {
+    background: #3b82f6;
+    color: white;
+}
+
+.table-item.active .table-row-count {
+    background: rgba(255,255,255,0.2);
+    color: white;
+}
+
+.table-name {
+    font-size: 0.9rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.table-row-count {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--bg-tertiary, #e2e8f0);
+    color: var(--text-muted, #64748b);
+    white-space: nowrap;
+}
+
+/* Main Content */
+.db-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.db-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--bg-secondary, #f8fafc);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    align-items: center;
+}
+
+.db-search {
+    flex: 1;
+    min-width: 200px;
+    position: relative;
+}
+
+.db-search input {
+    width: 100%;
+    padding: 8px 12px 8px 36px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background: var(--bg-primary, white);
+    color: var(--text-primary, #1e293b);
+}
+
+.db-search input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.db-search i {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted, #94a3b8);
+}
+
+/* Data Table */
+.db-table-container {
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.db-table-scroll {
+    overflow-x: auto;
+    max-height: calc(100vh - 320px);
+    overflow-y: auto;
+}
+
+.db-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.db-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.db-table th {
+    background: var(--bg-secondary, #f1f5f9);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--text-muted, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-bottom: 2px solid var(--border-color, #e2e8f0);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+
+.db-table th:hover {
+    background: var(--bg-tertiary, #e2e8f0);
+}
+
+.db-table th .sort-icon {
+    margin-left: 4px;
+    opacity: 0.3;
+}
+
+.db-table th .sort-icon.active {
+    opacity: 1;
+    color: #3b82f6;
+}
+
+.db-table td {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary, #1e293b);
+}
+
+.db-table td.cell-null {
+    color: var(--text-muted, #94a3b8);
+    font-style: italic;
+}
+
+.db-table tr:hover td {
+    background: var(--bg-tertiary, #f8fafc);
+}
+
+.db-table td.cell-number {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    text-align: right;
+}
+
+.db-table td.cell-expanded {
+    white-space: normal;
+    word-break: break-all;
+}
+
+/* Column Info */
+.column-info-panel {
+    margin-bottom: 12px;
+    padding: 12px 16px;
+    background: var(--bg-secondary, #f8fafc);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.col-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    background: var(--bg-primary, white);
+    border: 1px solid var(--border-color, #e2e8f0);
+}
+
+.col-badge .col-type {
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.7rem;
+}
+
+.col-badge.pk {
+    border-color: #f59e0b;
+    background: #fffbeb;
+}
+
+[data-theme="dark"] .col-badge.pk {
+    background: #78350f33;
+    border-color: #f59e0b55;
+}
+
+/* Pagination */
+.db-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--bg-secondary, #f8fafc);
+    border-top: 1px solid var(--border-color, #e2e8f0);
+}
+
+.db-pagination .page-info {
+    font-size: 0.85rem;
+    color: var(--text-muted, #64748b);
+}
+
+/* Query Editor */
+.query-panel {
+    display: none;
+    flex-direction: column;
+    height: calc(100vh - 200px);
+}
+
+.query-panel.active {
+    display: flex;
+}
+
+.query-editor-container {
+    position: relative;
+    margin-bottom: 12px;
+}
+
+.query-editor {
+    width: 100%;
+    min-height: 120px;
+    max-height: 250px;
+    padding: 14px 16px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    border: 2px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    background: #1e1e2e;
+    color: #cdd6f4;
+    resize: vertical;
+    tab-size: 2;
+}
+
+.query-editor:focus {
+    outline: none;
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+}
+
+.query-editor::placeholder {
+    color: #585b70;
+}
+
+.query-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.query-run-btn {
+    padding: 8px 20px;
+    background: #8b5cf6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.15s;
+}
+
+.query-run-btn:hover { background: #7c3aed; }
+.query-run-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.query-meta {
+    font-size: 0.8rem;
+    color: var(--text-muted, #64748b);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.query-meta .badge {
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.query-error {
+    padding: 12px 16px;
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    color: #dc2626;
+    font-size: 0.85rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    margin-bottom: 12px;
+    display: none;
+}
+
+[data-theme="dark"] .query-error {
+    background: #450a0a;
+    border-color: #7f1d1d;
+    color: #fca5a5;
+}
+
+.query-results {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+}
+
+.query-results .db-table-scroll {
+    max-height: 100%;
+}
+
+.query-results-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: var(--text-muted, #94a3b8);
+}
+
+/* Query History */
+.query-history-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border-top: 1px solid var(--border-color, #e2e8f0);
+}
+
+.query-history-item {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text-primary, #1e293b);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.15s;
+}
+
+.query-history-item:hover {
+    background: var(--bg-tertiary, #f1f5f9);
+}
+
+.query-history-item .query-text {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.query-history-item .query-time {
+    font-size: 0.7rem;
+    color: var(--text-muted, #94a3b8);
+    white-space: nowrap;
+}
+
+/* Table name chips (clickable in sidebar for quick SELECT) */
+.table-insert-btn {
+    opacity: 0;
+    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(139, 92, 246, 0.1);
+    color: #8b5cf6;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.table-item:hover .table-insert-btn {
+    opacity: 1;
+}
+
+/* Copy toast */
+.copy-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #10b981;
+    color: white;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    display: none;
+    z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Dark mode */
+[data-theme="dark"] .db-sidebar { background: #1f2937; border-color: #374151; }
+[data-theme="dark"] .db-toolbar { background: #1f2937; border-color: #374151; }
+[data-theme="dark"] .db-table th { background: #1f2937; border-color: #374151; }
+[data-theme="dark"] .db-table td { border-color: #374151; }
+[data-theme="dark"] .db-table tr:hover td { background: #111827; }
+[data-theme="dark"] .db-table-container { border-color: #374151; }
+[data-theme="dark"] .db-search input { background: #111827; border-color: #374151; color: #f1f5f9; }
+[data-theme="dark"] .column-info-panel { background: #1f2937; border-color: #374151; }
+[data-theme="dark"] .col-badge { background: #111827; border-color: #374151; }
+[data-theme="dark"] .db-pagination { background: #1f2937; border-color: #374151; }
+[data-theme="dark"] .query-results { border-color: #374151; }
+[data-theme="dark"] .query-history-item { border-color: #374151; }
+[data-theme="dark"] .query-history-list { border-color: #374151; }
+
+/* Responsive */
+@media (max-width: 768px) {
+    .db-layout { flex-direction: column; }
+    .db-sidebar { width: 100%; max-height: 200px; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <a href="{{ url_for('main.index') }}" class="text-muted text-decoration-none" style="font-size: 0.85rem;">
+            <i class="bi bi-arrow-left me-1"></i>Back to Logs
+        </a>
+        <h4 class="mt-1 mb-0">
+            <i class="bi bi-database me-2" style="color: #8b5cf6;"></i>{{ log_file.original_filename }}
+        </h4>
+        <small class="text-muted">
+            {{ tables|length }} table(s) &middot; {{ log_file.file_size|filesizeformat if log_file.file_size else 'Unknown size' }}
+        </small>
+    </div>
+</div>
+
+<div class="db-layout">
+    <!-- Sidebar: Table List -->
+    <div class="db-sidebar">
+        <div class="db-sidebar-header">
+            <i class="bi bi-table me-1"></i> Tables ({{ tables|length }})
+        </div>
+        {% for table in tables %}
+        <a href="{{ url_for('main.view_db', file_id=log_file.id, table=table.name) }}"
+           class="table-item {{ 'active' if table.name == selected_table and not request.args.get('mode') else '' }}"
+           onclick="if(queryMode){event.preventDefault(); insertTableName('{{ table.name }}');}">
+            <span class="table-name">
+                <i class="bi bi-table"></i>
+                {{ table.name }}
+            </span>
+            <span class="table-row-count">{{ table.row_count }} rows</span>
+        </a>
+        {% endfor %}
+        {% if not tables %}
+        <div class="text-center text-muted p-4">
+            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+            <p class="mt-2 mb-0" style="font-size: 0.85rem;">No tables found</p>
+        </div>
+        {% endif %}
+
+        <!-- Query Tab -->
+        <div class="db-sidebar-header" style="margin-top: 8px;">
+            <i class="bi bi-terminal me-1"></i> SQL Query
+        </div>
+        <a href="#" class="table-item {{ 'active' if request.args.get('mode') == 'query' else '' }}" onclick="event.preventDefault(); toggleQueryMode(true);" id="queryTabBtn">
+            <span class="table-name">
+                <i class="bi bi-code-square" style="color: #8b5cf6;"></i>
+                Run Query
+            </span>
+            <span class="table-row-count"><kbd style="font-size: 0.65rem;">Ctrl+Q</kbd></span>
+        </a>
+
+        <!-- Query History -->
+        <div class="query-history-list" id="queryHistoryList">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="db-content">
+        <!-- Query Panel (hidden by default, shown when query mode active) -->
+        <div class="query-panel" id="queryPanel">
+            <div class="query-editor-container">
+                <textarea class="query-editor" id="queryEditor"
+                    placeholder="SELECT * FROM artifacts LIMIT 100;&#10;&#10;-- Ctrl+Enter to run, Ctrl+Q to toggle query mode"
+                    spellcheck="false"></textarea>
+            </div>
+
+            <div class="query-toolbar">
+                <button class="query-run-btn" onclick="runQuery()" id="runQueryBtn">
+                    <i class="bi bi-play-fill"></i> Run
+                    <span style="font-size: 0.7rem; opacity: 0.7;">Ctrl+Enter</span>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="clearQuery()" title="Clear editor">
+                    <i class="bi bi-eraser"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="copyQueryResults()" title="Copy results">
+                    <i class="bi bi-clipboard me-1"></i>Copy Results
+                </button>
+
+                <div class="query-meta" id="queryMeta" style="display: none;">
+                    <span id="queryRowCount" class="badge bg-success">0 rows</span>
+                    <span id="queryTime" class="text-muted"></span>
+                    <span id="queryTruncated" class="badge bg-warning text-dark" style="display: none;">Truncated</span>
+                </div>
+            </div>
+
+            <div class="query-error" id="queryError"></div>
+
+            <div class="query-results" id="queryResults">
+                <div id="queryPlaceholder" style="padding: 20px;">
+                    <div class="text-center mb-3">
+                        <i class="bi bi-terminal" style="font-size: 2.5rem; color: #8b5cf6;"></i>
+                        <p class="mt-2 mb-1">Write a SQL query and press <kbd>Ctrl+Enter</kbd> to run</p>
+                        <small class="text-muted">Click a table name in the sidebar to insert it into the editor</small>
+                    </div>
+                    <div class="row g-2" style="max-width: 700px; margin: 0 auto;">
+                        <div class="col-12">
+                            <small class="text-muted fw-bold"><i class="bi bi-lightbulb text-warning me-1"></i>Example queries (click to use):</small>
+                        </div>
+                        {% for table in tables[:3] %}
+                        <div class="col-md-6">
+                            <div class="border rounded p-2 cursor-pointer" style="cursor: pointer; font-size: 0.78rem; font-family: monospace; background: var(--bg-secondary, #f8fafc);"
+                                 onclick="document.getElementById('queryEditor').value=this.dataset.query; document.getElementById('queryEditor').focus();"
+                                 data-query="SELECT * FROM &quot;{{ table.name }}&quot; LIMIT 100;">
+                                <span style="color: #8b5cf6;">SELECT</span> * <span style="color: #8b5cf6;">FROM</span> "{{ table.name }}" <span style="color: #8b5cf6;">LIMIT</span> 100;
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% if tables|length >= 2 %}
+                        <div class="col-md-6">
+                            <div class="border rounded p-2" style="cursor: pointer; font-size: 0.78rem; font-family: monospace; background: var(--bg-secondary, #f8fafc);"
+                                 onclick="document.getElementById('queryEditor').value=this.dataset.query; document.getElementById('queryEditor').focus();"
+                                 data-query="SELECT COUNT(*) as total FROM &quot;{{ tables[0].name }}&quot;;">
+                                <span style="color: #8b5cf6;">SELECT COUNT</span>(*) <span style="color: #8b5cf6;">FROM</span> "{{ tables[0].name }}";
+                            </div>
+                        </div>
+                        {% endif %}
+                        <div class="col-12 mt-2">
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle me-1"></i>
+                                <strong>Tip:</strong> This is read-only. JOINs, WHERE, GROUP BY, ORDER BY all work.
+                                You cannot modify data (INSERT/UPDATE/DELETE are blocked).
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                <div class="db-table-scroll" id="queryResultsTable" style="display: none;">
+                    <table class="db-table" id="queryDataTable">
+                        <thead id="queryResultsHead"></thead>
+                        <tbody id="queryResultsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table Browse Panel -->
+        <div id="browsePanel">
+        {% if selected_table %}
+        <!-- Toolbar -->
+        <div class="db-toolbar">
+            <div class="db-search">
+                <i class="bi bi-search"></i>
+                <form method="GET" action="{{ url_for('main.view_db', file_id=log_file.id) }}" style="display: contents;">
+                    <input type="hidden" name="table" value="{{ selected_table }}">
+                    <input type="hidden" name="per_page" value="{{ per_page }}">
+                    <input type="text" name="search" value="{{ search }}" placeholder="Search across all columns..."
+                           onkeydown="if(event.key==='Escape'){this.value='';this.form.submit();}">
+                </form>
+            </div>
+
+            <div class="d-flex gap-2 align-items-center">
+                <select class="form-select form-select-sm" style="width: auto;" onchange="changePerPage(this.value)">
+                    <option value="50" {{ 'selected' if per_page == 50 }}>50/page</option>
+                    <option value="100" {{ 'selected' if per_page == 100 }}>100/page</option>
+                    <option value="250" {{ 'selected' if per_page == 250 }}>250/page</option>
+                    <option value="500" {{ 'selected' if per_page == 500 }}>500/page</option>
+                    <option value="1000" {{ 'selected' if per_page == 1000 }}>1000/page</option>
+                </select>
+
+                <button class="btn btn-sm btn-outline-secondary" onclick="copyTableData()" title="Copy visible rows">
+                    <i class="bi bi-clipboard me-1"></i>Copy
+                </button>
+
+                <a href="/api/log-files/{{ log_file.id }}/db/table/{{ selected_table }}/export/csv"
+                   class="btn btn-sm btn-outline-secondary" title="Export entire table as CSV">
+                    <i class="bi bi-download me-1"></i>CSV
+                </a>
+            </div>
+        </div>
+
+        <!-- Column Info -->
+        {% set table_info = tables|selectattr('name', 'equalto', selected_table)|first %}
+        {% if table_info %}
+        <div class="column-info-panel">
+            <span style="font-size: 0.8rem; color: var(--text-muted); margin-right: 4px;">Columns:</span>
+            {% for col in table_info.columns %}
+            <span class="col-badge {{ 'pk' if col.pk }}">
+                {% if col.pk %}<i class="bi bi-key-fill" style="color: #f59e0b; font-size: 0.7rem;"></i>{% endif %}
+                {{ col.name }}
+                <span class="col-type">{{ col.type or 'any' }}</span>
+            </span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Data Table -->
+        <div class="db-table-container">
+            <div class="db-table-scroll">
+                <table class="db-table" id="dataTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px; text-align: center;">#</th>
+                            {% for col in columns %}
+                            <th onclick="sortBy('{{ col }}')">
+                                {{ col }}
+                                {% if sort_col == col %}
+                                <i class="bi bi-chevron-{{ 'down' if sort_dir == 'desc' else 'up' }} sort-icon active"></i>
+                                {% else %}
+                                <i class="bi bi-chevron-expand sort-icon"></i>
+                                {% endif %}
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                        <tr>
+                            <td style="text-align: center; color: var(--text-muted); font-size: 0.8rem;">
+                                {{ (page - 1) * per_page + loop.index }}
+                            </td>
+                            {% for col in columns %}
+                            {% set val = row[col] %}
+                            {% if val is none %}
+                            <td class="cell-null">NULL</td>
+                            {% elif val is number %}
+                            <td class="cell-number">{{ val }}</td>
+                            {% else %}
+                            <td title="{{ val }}" onclick="toggleExpand(this)">{{ val }}</td>
+                            {% endif %}
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                        {% if not rows %}
+                        <tr>
+                            <td colspan="{{ columns|length + 1 }}" class="text-center text-muted py-4">
+                                {% if search %}
+                                No rows match "{{ search }}"
+                                {% else %}
+                                Table is empty
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="db-pagination">
+                <span class="page-info">
+                    Showing {{ ((page - 1) * per_page) + 1 if rows else 0 }} - {{ [page * per_page, total_rows]|min }} of {{ total_rows }} rows
+                </span>
+                <div class="d-flex gap-2">
+                    {% if page > 1 %}
+                    <a href="{{ url_for('main.view_db', file_id=log_file.id, table=selected_table, page=1, per_page=per_page, search=search, sort=sort_col, dir=sort_dir) }}"
+                       class="btn btn-sm btn-outline-secondary"><i class="bi bi-chevron-double-left"></i></a>
+                    <a href="{{ url_for('main.view_db', file_id=log_file.id, table=selected_table, page=page-1, per_page=per_page, search=search, sort=sort_col, dir=sort_dir) }}"
+                       class="btn btn-sm btn-outline-secondary"><i class="bi bi-chevron-left"></i> Prev</a>
+                    {% endif %}
+
+                    <span class="btn btn-sm btn-outline-primary disabled">Page {{ page }} / {{ total_pages }}</span>
+
+                    {% if page < total_pages %}
+                    <a href="{{ url_for('main.view_db', file_id=log_file.id, table=selected_table, page=page+1, per_page=per_page, search=search, sort=sort_col, dir=sort_dir) }}"
+                       class="btn btn-sm btn-outline-secondary">Next <i class="bi bi-chevron-right"></i></a>
+                    <a href="{{ url_for('main.view_db', file_id=log_file.id, table=selected_table, page=total_pages, per_page=per_page, search=search, sort=sort_col, dir=sort_dir) }}"
+                       class="btn btn-sm btn-outline-secondary"><i class="bi bi-chevron-double-right"></i></a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% else %}
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-database-x" style="font-size: 4rem;"></i>
+            <p class="mt-3">Select a table from the sidebar to view its data</p>
+        </div>
+        {% endif %}
+        </div><!-- /browsePanel -->
+    </div>
+</div>
+
+<!-- Copy Toast -->
+<div class="copy-toast" id="copyToast">
+    <i class="bi bi-check-circle me-2"></i><span id="copyToastText">Copied!</span>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const viewerConfig = {
+    fileId: {{ log_file.id }},
+    table: '{{ selected_table }}',
+    page: {{ page }},
+    perPage: {{ per_page }},
+    search: '{{ search }}',
+    sortCol: '{{ sort_col }}',
+    sortDir: '{{ sort_dir }}'
+};
+
+function buildUrl(overrides) {
+    const params = new URLSearchParams({
+        table: overrides.table || viewerConfig.table,
+        page: overrides.page || 1,
+        per_page: overrides.per_page || viewerConfig.perPage,
+        search: overrides.search !== undefined ? overrides.search : viewerConfig.search,
+        sort: overrides.sort !== undefined ? overrides.sort : viewerConfig.sortCol,
+        dir: overrides.dir !== undefined ? overrides.dir : viewerConfig.sortDir
+    });
+    // Remove empty params
+    for (const [key, val] of [...params.entries()]) {
+        if (!val) params.delete(key);
+    }
+    return `{{ url_for('main.view_db', file_id=log_file.id) }}?${params.toString()}`;
+}
+
+function sortBy(col) {
+    let dir = 'asc';
+    if (viewerConfig.sortCol === col && viewerConfig.sortDir === 'asc') {
+        dir = 'desc';
+    }
+    window.location.href = buildUrl({ sort: col, dir: dir });
+}
+
+function changePerPage(val) {
+    window.location.href = buildUrl({ per_page: val });
+}
+
+function toggleExpand(td) {
+    td.classList.toggle('cell-expanded');
+}
+
+function showToast(message) {
+    const toast = document.getElementById('copyToast');
+    document.getElementById('copyToastText').textContent = message;
+    toast.style.display = 'block';
+    setTimeout(() => toast.style.display = 'none', 2000);
+}
+
+function copyTableData() {
+    const table = document.getElementById('dataTable');
+    if (!table) return;
+
+    const rows = table.querySelectorAll('tbody tr');
+    const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
+
+    let tsv = headers.join('\t') + '\n';
+    rows.forEach(row => {
+        const cells = Array.from(row.querySelectorAll('td')).map(td => td.textContent.trim());
+        tsv += cells.join('\t') + '\n';
+    });
+
+    navigator.clipboard.writeText(tsv).then(() => {
+        showToast(`Copied ${rows.length} rows!`);
+    });
+}
+
+// ============================================
+// Query Mode
+// ============================================
+let queryMode = false;
+let queryHistory = JSON.parse(localStorage.getItem('dbQueryHistory_{{ log_file.id }}') || '[]');
+
+function toggleQueryMode(enable) {
+    queryMode = enable !== undefined ? enable : !queryMode;
+
+    document.getElementById('queryPanel').classList.toggle('active', queryMode);
+    document.getElementById('browsePanel').style.display = queryMode ? 'none' : 'block';
+    document.getElementById('queryTabBtn').classList.toggle('active', queryMode);
+
+    // Deactivate table items when in query mode
+    document.querySelectorAll('.table-item').forEach(el => {
+        if (el.id !== 'queryTabBtn') {
+            el.classList.toggle('active', false);
+        }
+    });
+
+    if (queryMode) {
+        setTimeout(() => document.getElementById('queryEditor').focus(), 100);
+    }
+
+    renderQueryHistory();
+}
+
+function insertTableName(tableName) {
+    const editor = document.getElementById('queryEditor');
+    if (!editor.value.trim()) {
+        editor.value = `SELECT * FROM "${tableName}" LIMIT 100;`;
+    } else {
+        // Insert at cursor
+        const start = editor.selectionStart;
+        const before = editor.value.substring(0, start);
+        const after = editor.value.substring(editor.selectionEnd);
+        editor.value = before + `"${tableName}"` + after;
+        editor.selectionStart = editor.selectionEnd = start + tableName.length + 2;
+    }
+    editor.focus();
+}
+
+async function runQuery() {
+    const editor = document.getElementById('queryEditor');
+    const query = editor.value.trim();
+    if (!query) return;
+
+    const btn = document.getElementById('runQueryBtn');
+    const origHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Running...';
+    btn.disabled = true;
+
+    document.getElementById('queryError').style.display = 'none';
+    document.getElementById('queryMeta').style.display = 'none';
+
+    try {
+        const response = await fetch(`/api/log-files/${viewerConfig.fileId}/db/query`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: query, limit: 1000 })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+            document.getElementById('queryError').textContent = data.error || 'Query failed';
+            document.getElementById('queryError').style.display = 'block';
+            document.getElementById('queryPlaceholder').style.display = 'flex';
+            document.getElementById('queryResultsTable').style.display = 'none';
+        } else {
+            renderQueryResults(data);
+            addToHistory(query, data.row_count, data.elapsed_seconds);
+        }
+    } catch (err) {
+        document.getElementById('queryError').textContent = 'Network error: ' + err.message;
+        document.getElementById('queryError').style.display = 'block';
+    } finally {
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+    }
+}
+
+function renderQueryResults(data) {
+    const { columns, rows, row_count, truncated, elapsed_seconds } = data;
+
+    // Hide placeholder, show table
+    document.getElementById('queryPlaceholder').style.display = 'none';
+    document.getElementById('queryResultsTable').style.display = 'block';
+
+    // Meta
+    document.getElementById('queryMeta').style.display = 'flex';
+    document.getElementById('queryRowCount').textContent = `${row_count} row${row_count !== 1 ? 's' : ''}`;
+    document.getElementById('queryTime').textContent = `${elapsed_seconds}s`;
+    document.getElementById('queryTruncated').style.display = truncated ? 'inline' : 'none';
+
+    // Header
+    const thead = document.getElementById('queryResultsHead');
+    thead.innerHTML = '<tr><th style="width:50px;text-align:center;">#</th>' +
+        columns.map(c => `<th>${escapeHtml(c)}</th>`).join('') + '</tr>';
+
+    // Body
+    const tbody = document.getElementById('queryResultsBody');
+    if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${columns.length + 1}" class="text-center text-muted py-4">Query returned no results</td></tr>`;
+        return;
+    }
+
+    let html = '';
+    rows.forEach((row, i) => {
+        html += `<tr><td style="text-align:center;color:var(--text-muted);font-size:0.8rem;">${i + 1}</td>`;
+        columns.forEach(col => {
+            const val = row[col];
+            if (val === null || val === undefined) {
+                html += '<td class="cell-null">NULL</td>';
+            } else if (typeof val === 'number') {
+                html += `<td class="cell-number">${val}</td>`;
+            } else {
+                html += `<td title="${escapeHtml(String(val))}" onclick="toggleExpand(this)">${escapeHtml(String(val))}</td>`;
+            }
+        });
+        html += '</tr>';
+    });
+    tbody.innerHTML = html;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function clearQuery() {
+    document.getElementById('queryEditor').value = '';
+    document.getElementById('queryError').style.display = 'none';
+    document.getElementById('queryMeta').style.display = 'none';
+    document.getElementById('queryPlaceholder').style.display = 'flex';
+    document.getElementById('queryResultsTable').style.display = 'none';
+    document.getElementById('queryEditor').focus();
+}
+
+function copyQueryResults() {
+    const table = document.getElementById('queryDataTable');
+    if (!table || document.getElementById('queryResultsTable').style.display === 'none') {
+        showToast('No results to copy');
+        return;
+    }
+
+    const rows = table.querySelectorAll('tbody tr');
+    const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
+
+    let tsv = headers.join('\t') + '\n';
+    rows.forEach(row => {
+        const cells = Array.from(row.querySelectorAll('td')).map(td => td.textContent.trim());
+        tsv += cells.join('\t') + '\n';
+    });
+
+    navigator.clipboard.writeText(tsv).then(() => {
+        showToast(`Copied ${rows.length} rows!`);
+    });
+}
+
+// ============================================
+// Query History
+// ============================================
+function addToHistory(query, rowCount, elapsed) {
+    // Avoid duplicates
+    queryHistory = queryHistory.filter(h => h.query !== query);
+    queryHistory.unshift({
+        query: query,
+        rowCount: rowCount,
+        elapsed: elapsed,
+        timestamp: Date.now()
+    });
+    // Keep last 20
+    queryHistory = queryHistory.slice(0, 20);
+    localStorage.setItem('dbQueryHistory_{{ log_file.id }}', JSON.stringify(queryHistory));
+    renderQueryHistory();
+}
+
+function renderQueryHistory() {
+    const container = document.getElementById('queryHistoryList');
+    if (!queryMode || queryHistory.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = queryHistory.map((h, i) => `
+        <div class="query-history-item" onclick="loadHistoryQuery(${i})" title="${escapeHtml(h.query)}">
+            <i class="bi bi-clock-history" style="font-size: 0.75rem; color: var(--text-muted);"></i>
+            <span class="query-text">${escapeHtml(h.query)}</span>
+            <span class="query-time">${h.rowCount} rows</span>
+        </div>
+    `).join('');
+}
+
+function loadHistoryQuery(index) {
+    const h = queryHistory[index];
+    if (h) {
+        document.getElementById('queryEditor').value = h.query;
+        document.getElementById('queryEditor').focus();
+    }
+}
+
+// ============================================
+// Keyboard Shortcuts
+// ============================================
+document.addEventListener('keydown', function(e) {
+    // Ctrl+Q: toggle query mode
+    if (e.key === 'q' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        toggleQueryMode();
+        return;
+    }
+
+    // Inside query editor
+    if (document.activeElement.id === 'queryEditor') {
+        // Ctrl+Enter: run query
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            runQuery();
+            return;
+        }
+        // Tab: insert spaces
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            const editor = document.activeElement;
+            const start = editor.selectionStart;
+            editor.value = editor.value.substring(0, start) + '  ' + editor.value.substring(editor.selectionEnd);
+            editor.selectionStart = editor.selectionEnd = start + 2;
+            return;
+        }
+        // Escape: blur editor
+        if (e.key === 'Escape') {
+            document.activeElement.blur();
+            return;
+        }
+        return; // Don't process other shortcuts while typing
+    }
+
+    if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+    if (e.key === '/') {
+        e.preventDefault();
+        if (queryMode) {
+            document.getElementById('queryEditor').focus();
+        } else {
+            document.querySelector('.db-search input[name="search"]')?.focus();
+        }
+    }
+});
+
+// Check URL for query mode
+if (new URLSearchParams(window.location.search).get('mode') === 'query') {
+    toggleQueryMode(true);
+}
+</script>
+{% endblock %}

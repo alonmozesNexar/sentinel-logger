@@ -133,6 +133,69 @@ def search_log_entries(file_id):
     })
 
 
+@api_bp.route('/log-files/<int:file_id>/db/query', methods=['POST'])
+def run_db_query(file_id):
+    """Execute a SQL query against a SQLite database file."""
+    import sqlite3
+    import time
+
+    log_file = user_owns_log_file(file_id)
+    file_path = current_app.config['UPLOAD_FOLDER'] / log_file.filename
+
+    if not file_path.exists():
+        return jsonify({'error': 'Database file not found'}), 404
+
+    data = request.get_json()
+    if not data or not data.get('query'):
+        return jsonify({'error': 'No query provided'}), 400
+
+    query = data['query'].strip()
+
+    # Safety: block destructive statements (read-only viewer)
+    forbidden = ('DROP', 'DELETE', 'INSERT', 'UPDATE', 'ALTER', 'CREATE', 'REPLACE', 'ATTACH', 'DETACH')
+    first_word = query.split()[0].upper() if query.split() else ''
+    if first_word in forbidden:
+        return jsonify({'error': f'Write operations are not allowed ({first_word}). This is a read-only viewer.'}), 403
+
+    # Limit result size
+    max_rows = data.get('limit', 1000)
+    max_rows = min(max_rows, 10000)
+
+    try:
+        start_time = time.time()
+        conn = sqlite3.connect(str(file_path))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute(query)
+        rows_raw = cursor.fetchmany(max_rows + 1)
+
+        truncated = len(rows_raw) > max_rows
+        if truncated:
+            rows_raw = rows_raw[:max_rows]
+
+        columns = [desc[0] for desc in cursor.description] if cursor.description else []
+        rows = [dict(row) for row in rows_raw]
+
+        elapsed = round(time.time() - start_time, 3)
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'columns': columns,
+            'rows': rows,
+            'row_count': len(rows),
+            'truncated': truncated,
+            'max_rows': max_rows,
+            'elapsed_seconds': elapsed
+        })
+
+    except sqlite3.Error as e:
+        return jsonify({'error': f'SQL error: {str(e)}'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @api_bp.route('/log-files/<int:file_id>/charts', methods=['GET'])
 def get_chart_data(file_id):
     """Get chart data for a log file"""
@@ -1181,6 +1244,49 @@ def reparse_log_file(file_id):
 # Export Endpoints
 # ============================================
 
+@api_bp.route('/log-files/<int:file_id>/db/table/<table_name>/export/csv', methods=['GET'])
+def export_db_table_csv(file_id, table_name):
+    """Export a SQLite table as CSV."""
+    import sqlite3
+    import csv
+    import io
+    from flask import Response
+
+    log_file = user_owns_log_file(file_id)
+    file_path = current_app.config['UPLOAD_FOLDER'] / log_file.filename
+
+    if not file_path.exists():
+        return jsonify({'error': 'File not found'}), 404
+
+    try:
+        conn = sqlite3.connect(str(file_path))
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute(f'PRAGMA table_info("{table_name}")')
+        columns = [col[1] for col in cursor.fetchall()]
+
+        cursor.execute(f'SELECT * FROM "{table_name}"')
+        rows = cursor.fetchall()
+        conn.close()
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(columns)
+        for row in rows:
+            writer.writerow([row[col] for col in columns])
+
+        output.seek(0)
+        safe_name = table_name.replace('"', '').replace('/', '_')
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename={safe_name}_export.csv'}
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @api_bp.route('/log-files/<int:file_id>/export/csv', methods=['GET'])
 def export_log_csv(file_id):
     """Export log entries as CSV."""
@@ -1405,6 +1511,44 @@ def compare_logs():
     only_in_file1 = issues1_titles - issues2_titles
     only_in_file2 = issues2_titles - issues1_titles
 
+    # Compute line-level diff of error/warning lines
+    import difflib
+
+    def extract_significant_lines(entries):
+        """Extract ERROR/WARNING/CRITICAL lines for diff."""
+        return [e.raw_content or '' for e in entries
+                if (e.severity or '').upper() in ('ERROR', 'WARNING', 'CRITICAL')]
+
+    lines1 = extract_significant_lines(entries1)
+    lines2 = extract_significant_lines(entries2)
+
+    # Unified diff
+    diff_lines = []
+    differ = difflib.unified_diff(
+        lines1, lines2,
+        fromfile=file1.original_filename,
+        tofile=file2.original_filename,
+        lineterm='',
+        n=1  # 1 line of context
+    )
+    for line in differ:
+        if line.startswith('+++') or line.startswith('---'):
+            diff_lines.append({'type': 'header', 'content': line})
+        elif line.startswith('@@'):
+            diff_lines.append({'type': 'hunk', 'content': line})
+        elif line.startswith('+'):
+            diff_lines.append({'type': 'added', 'content': line[1:]})
+        elif line.startswith('-'):
+            diff_lines.append({'type': 'removed', 'content': line[1:]})
+        else:
+            diff_lines.append({'type': 'context', 'content': line[1:] if line.startswith(' ') else line})
+
+    # Also compute new/resolved errors for summary
+    errors1 = set(e.raw_content or '' for e in entries1 if (e.severity or '').upper() in ('ERROR', 'CRITICAL'))
+    errors2 = set(e.raw_content or '' for e in entries2 if (e.severity or '').upper() in ('ERROR', 'CRITICAL'))
+    new_errors = list(errors2 - errors1)[:50]
+    resolved_errors = list(errors1 - errors2)[:50]
+
     return jsonify({
         'file1': {
             'id': file1.id,
@@ -1429,7 +1573,11 @@ def compare_logs():
             'only_in_file1': list(only_in_file1),
             'only_in_file2': list(only_in_file2),
             'error_diff': sev2['ERROR'] - sev1['ERROR'],
-            'warning_diff': sev2['WARNING'] - sev1['WARNING']
+            'warning_diff': sev2['WARNING'] - sev1['WARNING'],
+            'diff_lines': diff_lines[:500],
+            'new_errors': new_errors,
+            'resolved_errors': resolved_errors,
+            'diff_truncated': len(diff_lines) > 500
         }
     })
 
