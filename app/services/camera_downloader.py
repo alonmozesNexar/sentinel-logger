@@ -100,7 +100,8 @@ class CameraDownloader:
                     self.transport = self.client.get_transport()
                     self.auth_method = method_name
                     return True, f"Connected successfully (using {method_name})"
-                except paramiko.AuthenticationException:
+                except paramiko.AuthenticationException as e:
+                    last_error = e
                     try:
                         self.client.close()
                     except Exception:
@@ -120,6 +121,8 @@ class CameraDownloader:
                     break
 
         # All methods failed — return user-friendly error
+        if isinstance(last_error, paramiko.AuthenticationException):
+            return False, f"Authentication failed for {self.username}@{self.host}. Check username and password."
         error_msg = str(last_error) if last_error else "Unknown error"
         if 'Connection reset by peer' in error_msg or 'banner' in error_msg.lower():
             return False, f"Camera SSH refused the connection ({self.host}). Try again in a few seconds, or reboot the camera."
