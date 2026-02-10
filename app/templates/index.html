@@ -282,6 +282,7 @@
             <button type="button" class="btn btn-outline-secondary filter-type active" data-value="all" onclick="setFilter(this)">All</button>
             <button type="button" class="btn btn-outline-secondary filter-type" data-value="log" onclick="setFilter(this)">.log</button>
             <button type="button" class="btn btn-outline-secondary filter-type" data-value="db" onclick="setFilter(this)">.db</button>
+            <button type="button" class="btn btn-outline-secondary filter-type" data-value="json" onclick="setFilter(this)">.json</button>
         </div>
     </div>
     <div class="filter-group">
@@ -349,7 +350,7 @@
             {% else %}
             {% set file_serial = file_serial_info %}
             {% endif %}
-            {% set file_type = 'db' if file.original_filename.endswith('.db') else 'log' %}
+            {% set file_type = 'db' if file.original_filename.endswith('.db') else ('json' if file.original_filename.endswith('.json') else 'log') %}
             <tr class="log-row"
                 data-id="{{ file.id }}"
                 data-filename="{{ file.original_filename|lower }}"
@@ -366,6 +367,8 @@
                     <a href="{{ url_for('main.view_log', file_id=file.id) }}" class="file-link">
                         {% if file_type == 'db' %}
                         <i class="bi bi-database text-info"></i>
+                        {% elif file_type == 'json' %}
+                        <i class="bi bi-filetype-json" style="color: #f59e0b;"></i>
                         {% else %}
                         <i class="bi bi-file-text text-muted"></i>
                         {% endif %}

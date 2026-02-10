@@ -1,0 +1,660 @@
+{% extends "base.html" %}
+
+{% block title %}JSON Formatter{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Layout */
+.json-formatter-layout {
+    display: flex;
+    gap: 16px;
+    min-height: calc(100vh - 180px);
+}
+
+/* Input panel */
+.json-input-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.json-input-panel textarea {
+    flex: 1;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    padding: 16px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, #1e293b);
+    resize: none;
+    outline: none;
+}
+
+.json-input-panel textarea:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+/* Output panel */
+.json-output-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Toolbar */
+.json-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--bg-secondary, #f8fafc);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.json-search {
+    position: relative;
+    flex: 1;
+    min-width: 180px;
+}
+
+.json-search i {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.85rem;
+}
+
+.json-search input {
+    width: 100%;
+    padding: 6px 10px 6px 32px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    background: var(--bg-primary, #fff);
+    color: var(--text-primary, #1e293b);
+    outline: none;
+}
+
+.json-search input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+/* Search results bar */
+.json-search-results {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 14px;
+    font-size: 0.82rem;
+    color: var(--text-muted, #64748b);
+}
+
+/* Tree container */
+.json-tree {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    padding: 16px;
+    background: var(--bg-primary, #fff);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    overflow: auto;
+    flex: 1;
+}
+
+.json-tree.empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted, #94a3b8);
+    font-family: inherit;
+}
+
+/* JSON node */
+.json-node {
+    position: relative;
+}
+
+.json-children {
+    padding-left: 22px;
+    border-left: 1px solid var(--border-color, #e2e8f0);
+    margin-left: 6px;
+}
+
+.json-children.collapsed {
+    display: none;
+}
+
+/* Toggle caret */
+.json-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    margin-right: 2px;
+    transition: transform 0.15s;
+    color: var(--text-muted, #94a3b8);
+    vertical-align: middle;
+}
+
+.json-toggle i {
+    font-size: 0.65rem;
+}
+
+.json-toggle.collapsed {
+    transform: rotate(-90deg);
+}
+
+/* Syntax colors */
+.json-key { color: #3b82f6; font-weight: 500; }
+.json-string { color: #16a34a; }
+.json-number { color: #d97706; }
+.json-boolean { color: #8b5cf6; font-weight: 500; }
+.json-null { color: #94a3b8; font-style: italic; }
+.json-bracket { color: var(--text-muted, #64748b); }
+.json-comma { color: var(--text-muted, #64748b); }
+
+.json-count {
+    display: none;
+    font-size: 0.75rem;
+    color: var(--text-muted, #94a3b8);
+    font-style: italic;
+    margin-left: 4px;
+}
+
+/* Search highlight */
+.json-search-highlight {
+    background: #fbbf24;
+    color: #1e293b;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
+/* Error display */
+.json-error {
+    color: #ef4444;
+    font-size: 0.82rem;
+    padding: 8px 14px;
+    background: rgba(239, 68, 68, 0.08);
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+/* Copy toast */
+.copy-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #10b981;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    display: none;
+    z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    animation: toastIn 0.3s ease;
+}
+
+@keyframes toastIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Dark mode */
+[data-theme="dark"] .json-key { color: #60a5fa; }
+[data-theme="dark"] .json-string { color: #4ade80; }
+[data-theme="dark"] .json-number { color: #fbbf24; }
+[data-theme="dark"] .json-boolean { color: #a78bfa; }
+[data-theme="dark"] .json-null { color: #6b7280; }
+[data-theme="dark"] .json-search-highlight { background: #ca8a04; color: #fff; }
+
+/* Responsive */
+@media (max-width: 992px) {
+    .json-formatter-layout {
+        flex-direction: column;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0">
+        <i class="bi bi-filetype-json me-2" style="color: #f59e0b;"></i>JSON Formatter
+    </h4>
+    <small class="text-muted" id="jsonStats"></small>
+</div>
+
+<!-- Toolbar -->
+<div class="json-toolbar">
+    <div class="json-search">
+        <i class="bi bi-search"></i>
+        <input type="text" id="jsonSearchInput" placeholder="Search keys and values... ( / )"
+               oninput="debouncedSearch(this.value)">
+    </div>
+
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+        <!-- Depth Selector -->
+        <select class="form-select form-select-sm" style="width: auto;" id="depthSelect" onchange="collapseToDepth(parseInt(this.value))">
+            <option value="999">Expand All</option>
+            <option value="1">Depth 1</option>
+            <option value="2" selected>Depth 2</option>
+            <option value="3">Depth 3</option>
+            <option value="5">Depth 5</option>
+            <option value="0">Collapse All</option>
+        </select>
+
+        <button class="btn btn-sm btn-outline-secondary" onclick="formatInput()" title="Format / beautify">
+            <i class="bi bi-magic me-1"></i>Format
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="minifyInput()" title="Minify">
+            <i class="bi bi-arrows-collapse me-1"></i>Minify
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="copyFormatted()" title="Copy formatted">
+            <i class="bi bi-clipboard me-1"></i>Copy
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="clearAll()" title="Clear">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+</div>
+
+<!-- Search Results -->
+<div id="searchResultsBar" class="json-search-results" style="display: none;">
+    <span id="searchResultsCount">0 matches</span>
+    <button class="btn btn-sm btn-link p-0" onclick="clearSearch()">Clear</button>
+</div>
+
+<!-- Two-panel layout -->
+<div class="json-formatter-layout">
+    <!-- Left: Input -->
+    <div class="json-input-panel">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <small class="text-muted fw-semibold">INPUT</small>
+            <button class="btn btn-sm btn-link p-0 text-muted" onclick="pasteFromClipboard()" title="Paste from clipboard">
+                <i class="bi bi-clipboard-plus me-1"></i>Paste
+            </button>
+        </div>
+        <textarea id="jsonInput" placeholder="Paste your JSON here..." spellcheck="false"></textarea>
+    </div>
+
+    <!-- Right: Output (tree) -->
+    <div class="json-output-panel">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <small class="text-muted fw-semibold">OUTPUT</small>
+        </div>
+        <div id="jsonError" class="json-error" style="display: none;"></div>
+        <div class="json-tree empty" id="jsonTreeView">
+            <span><i class="bi bi-filetype-json me-2"></i>Paste JSON on the left to see the tree view</span>
+        </div>
+    </div>
+</div>
+
+<!-- Copy Toast -->
+<div class="copy-toast" id="copyToast">
+    <i class="bi bi-check-circle me-2"></i><span id="copyToastText">Copied!</span>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ============================================
+// State
+// ============================================
+let parsedJson = null;
+let jsonValid = false;
+let currentDepth = 2;
+let searchTerm = '';
+
+const inputEl = document.getElementById('jsonInput');
+const treeEl = document.getElementById('jsonTreeView');
+const errorEl = document.getElementById('jsonError');
+const statsEl = document.getElementById('jsonStats');
+
+// ============================================
+// Input handling
+// ============================================
+let parseTimer;
+inputEl.addEventListener('input', function() {
+    clearTimeout(parseTimer);
+    parseTimer = setTimeout(parseAndRender, 400);
+});
+
+function parseAndRender() {
+    const raw = inputEl.value.trim();
+
+    errorEl.style.display = 'none';
+
+    if (!raw) {
+        parsedJson = null;
+        jsonValid = false;
+        treeEl.innerHTML = '<span><i class="bi bi-filetype-json me-2"></i>Paste JSON on the left to see the tree view</span>';
+        treeEl.classList.add('empty');
+        statsEl.textContent = '';
+        return;
+    }
+
+    try {
+        parsedJson = JSON.parse(raw);
+        jsonValid = true;
+        treeEl.classList.remove('empty');
+        renderTree();
+        collapseToDepth(currentDepth);
+
+        // Stats
+        const type = Array.isArray(parsedJson) ? 'array' : typeof parsedJson === 'object' ? 'object' : typeof parsedJson;
+        let info = type;
+        if (Array.isArray(parsedJson)) info += ' · ' + parsedJson.length + ' items';
+        else if (typeof parsedJson === 'object' && parsedJson !== null) info += ' · ' + Object.keys(parsedJson).length + ' keys';
+        info += ' · ' + formatSize(raw.length);
+        statsEl.textContent = info;
+    } catch(e) {
+        parsedJson = null;
+        jsonValid = false;
+        treeEl.innerHTML = '';
+        treeEl.classList.add('empty');
+        errorEl.style.display = 'block';
+        errorEl.innerHTML = '<i class="bi bi-exclamation-triangle me-2"></i>' + escapeHtml(e.message);
+        statsEl.textContent = '';
+    }
+}
+
+function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+// ============================================
+// Actions
+// ============================================
+function formatInput() {
+    if (!jsonValid) return;
+    inputEl.value = JSON.stringify(parsedJson, null, 2);
+    showToast('Formatted!');
+}
+
+function minifyInput() {
+    if (!jsonValid) return;
+    inputEl.value = JSON.stringify(parsedJson);
+    showToast('Minified!');
+}
+
+function copyFormatted() {
+    if (!jsonValid) {
+        showToast('Invalid JSON');
+        return;
+    }
+    navigator.clipboard.writeText(JSON.stringify(parsedJson, null, 2)).then(() => showToast('Copied!'));
+}
+
+function clearAll() {
+    inputEl.value = '';
+    parseAndRender();
+    clearSearch();
+}
+
+function pasteFromClipboard() {
+    navigator.clipboard.readText().then(text => {
+        inputEl.value = text;
+        parseAndRender();
+    });
+}
+
+// ============================================
+// Tree Rendering
+// ============================================
+function renderTree() {
+    treeEl.innerHTML = '';
+    treeEl.appendChild(renderNode(parsedJson, null, 0, false));
+}
+
+function renderNode(value, key, depth, isLast) {
+    const node = document.createElement('div');
+    node.className = 'json-node';
+    node.dataset.depth = depth;
+
+    const comma = isLast ? '' : '<span class="json-comma">,</span>';
+
+    if (value === null) {
+        node.innerHTML = formatKey(key) + '<span class="json-null">null</span>' + comma;
+    } else if (typeof value === 'boolean') {
+        node.innerHTML = formatKey(key) + '<span class="json-boolean">' + value + '</span>' + comma;
+    } else if (typeof value === 'number') {
+        node.innerHTML = formatKey(key) + '<span class="json-number">' + value + '</span>' + comma;
+    } else if (typeof value === 'string') {
+        const escaped = escapeHtml(value);
+        const truncated = escaped.length > 500 ? escaped.substring(0, 500) + '...' : escaped;
+        node.innerHTML = formatKey(key) + '<span class="json-string">"' + truncated + '"</span>' + comma;
+    } else if (Array.isArray(value)) {
+        renderCollapsible(node, key, value, depth, '[', ']', 'items', isLast);
+    } else if (typeof value === 'object') {
+        renderCollapsible(node, key, value, depth, '{', '}', 'keys', isLast);
+    }
+
+    return node;
+}
+
+function renderCollapsible(node, key, value, depth, openBr, closeBr, countLabel, isLast) {
+    const entries = Array.isArray(value) ? value.map((v, i) => [i, v]) : Object.entries(value);
+    const count = entries.length;
+    const comma = isLast ? '' : '<span class="json-comma">,</span>';
+
+    const toggle = document.createElement('span');
+    toggle.className = 'json-toggle';
+    toggle.innerHTML = '<i class="bi bi-caret-down-fill"></i>';
+    toggle.onclick = function(e) { e.stopPropagation(); toggleNode(this); };
+    node.appendChild(toggle);
+
+    if (key !== null && key !== undefined && typeof key === 'string') {
+        const keySpan = document.createElement('span');
+        keySpan.className = 'json-key';
+        keySpan.textContent = '"' + key + '"';
+        node.appendChild(keySpan);
+        node.insertAdjacentHTML('beforeend', ': ');
+    }
+
+    node.insertAdjacentHTML('beforeend', '<span class="json-bracket">' + openBr + '</span>');
+
+    const countBadge = document.createElement('span');
+    countBadge.className = 'json-count';
+    countBadge.textContent = count + ' ' + countLabel;
+    node.appendChild(countBadge);
+
+    const children = document.createElement('div');
+    children.className = 'json-children';
+    entries.forEach(([k, v], idx) => {
+        const childIsLast = idx === entries.length - 1;
+        const childKey = Array.isArray(value) ? null : k;
+        children.appendChild(renderNode(v, childKey, depth + 1, childIsLast));
+    });
+    node.appendChild(children);
+
+    node.insertAdjacentHTML('beforeend', '<span class="json-bracket">' + closeBr + '</span>' + comma);
+}
+
+function formatKey(key) {
+    if (key === null || key === undefined) return '';
+    return '<span class="json-key">"' + escapeHtml(String(key)) + '"</span>: ';
+}
+
+// ============================================
+// Collapse / Expand
+// ============================================
+function toggleNode(toggleEl) {
+    const node = toggleEl.parentElement;
+    const children = node.querySelector('.json-children');
+    const countBadge = node.querySelector('.json-count');
+
+    if (children.classList.contains('collapsed')) {
+        children.classList.remove('collapsed');
+        toggleEl.classList.remove('collapsed');
+        if (countBadge) countBadge.style.display = 'none';
+    } else {
+        children.classList.add('collapsed');
+        toggleEl.classList.add('collapsed');
+        if (countBadge) countBadge.style.display = 'inline';
+    }
+}
+
+function collapseToDepth(depth) {
+    currentDepth = depth;
+    document.querySelectorAll('.json-node').forEach(node => {
+        const nodeDepth = parseInt(node.dataset.depth || '0');
+        const children = node.querySelector(':scope > .json-children');
+        const toggle = node.querySelector(':scope > .json-toggle');
+        const countBadge = node.querySelector(':scope > .json-count');
+
+        if (!children || !toggle) return;
+
+        if (nodeDepth >= depth) {
+            children.classList.add('collapsed');
+            toggle.classList.add('collapsed');
+            if (countBadge) countBadge.style.display = 'inline';
+        } else {
+            children.classList.remove('collapsed');
+            toggle.classList.remove('collapsed');
+            if (countBadge) countBadge.style.display = 'none';
+        }
+    });
+}
+
+// ============================================
+// Search
+// ============================================
+function debounce(fn, ms) {
+    let timer;
+    return function(...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), ms);
+    };
+}
+
+const debouncedSearch = debounce(function(term) {
+    searchTerm = term.toLowerCase().trim();
+    performSearch();
+}, 300);
+
+function performSearch() {
+    document.querySelectorAll('.json-search-highlight').forEach(el => {
+        const parent = el.parentNode;
+        parent.replaceChild(document.createTextNode(el.textContent), el);
+        parent.normalize();
+    });
+
+    const bar = document.getElementById('searchResultsBar');
+
+    if (!searchTerm) {
+        bar.style.display = 'none';
+        return;
+    }
+
+    let matchCount = 0;
+    const walker = document.createTreeWalker(treeEl, NodeFilter.SHOW_TEXT);
+    const textNodes = [];
+
+    while (walker.nextNode()) {
+        textNodes.push(walker.currentNode);
+    }
+
+    textNodes.forEach(textNode => {
+        const text = textNode.textContent;
+        const lowerText = text.toLowerCase();
+        if (lowerText.includes(searchTerm)) {
+            const span = document.createElement('span');
+            span.innerHTML = highlightText(text, searchTerm);
+            textNode.parentNode.replaceChild(span, textNode);
+            matchCount += (lowerText.split(searchTerm).length - 1);
+            expandParents(span);
+        }
+    });
+
+    bar.style.display = 'flex';
+    document.getElementById('searchResultsCount').textContent =
+        matchCount + ' match' + (matchCount !== 1 ? 'es' : '');
+
+    const firstMatch = treeEl.querySelector('.json-search-highlight');
+    if (firstMatch) {
+        firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
+function highlightText(text, term) {
+    const regex = new RegExp('(' + escapeRegex(term) + ')', 'gi');
+    return text.replace(regex, '<span class="json-search-highlight">$1</span>');
+}
+
+function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function expandParents(el) {
+    let node = el.closest('.json-children');
+    while (node) {
+        node.classList.remove('collapsed');
+        const toggle = node.parentElement.querySelector(':scope > .json-toggle');
+        const badge = node.parentElement.querySelector(':scope > .json-count');
+        if (toggle) toggle.classList.remove('collapsed');
+        if (badge) badge.style.display = 'none';
+        node = node.parentElement.closest('.json-children');
+    }
+}
+
+function clearSearch() {
+    document.getElementById('jsonSearchInput').value = '';
+    searchTerm = '';
+    performSearch();
+    if (jsonValid) collapseToDepth(currentDepth);
+}
+
+// ============================================
+// Utilities
+// ============================================
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showToast(message) {
+    const toast = document.getElementById('copyToast');
+    document.getElementById('copyToastText').textContent = message;
+    toast.style.display = 'block';
+    setTimeout(() => toast.style.display = 'none', 2000);
+}
+
+// ============================================
+// Keyboard Shortcuts
+// ============================================
+document.addEventListener('keydown', function(e) {
+    if (document.activeElement === inputEl) return;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+
+    if (e.key === '/') {
+        e.preventDefault();
+        document.getElementById('jsonSearchInput').focus();
+    }
+    if (e.key === 'e' && !e.ctrlKey && !e.metaKey) {
+        collapseToDepth(999);
+        document.getElementById('depthSelect').value = '999';
+    }
+    if (e.key === 'c' && !e.ctrlKey && !e.metaKey) {
+        collapseToDepth(0);
+        document.getElementById('depthSelect').value = '0';
+    }
+});
+</script>
+{% endblock %}

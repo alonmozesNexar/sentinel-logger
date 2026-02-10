@@ -799,6 +799,53 @@ def view_db(file_id):
     )
 
 
+@main_bp.route('/json-formatter')
+def json_formatter():
+    """Standalone JSON formatter/viewer - paste JSON and format it"""
+    return render_template('json_formatter.html')
+
+
+@main_bp.route('/json/<int:file_id>')
+def view_json(file_id):
+    """View JSON file with syntax-highlighted collapsible tree"""
+    log_file = user_owns_log_file(file_id)
+    file_path = current_app.config['UPLOAD_FOLDER'] / log_file.filename
+
+    if not file_path.exists():
+        flash('JSON file not found on disk', 'error')
+        return redirect(url_for('main.index'))
+
+    # Read JSON content
+    json_content = ''
+    json_valid = True
+    json_error = ''
+    json_stats = {}
+    try:
+        raw = file_path.read_text(encoding='utf-8', errors='replace')
+        json_content = raw
+        parsed = json.loads(raw)
+        json_stats = {
+            'type': type(parsed).__name__,
+            'size': len(raw),
+            'keys': len(parsed) if isinstance(parsed, dict) else None,
+            'items': len(parsed) if isinstance(parsed, list) else None,
+        }
+    except json.JSONDecodeError as e:
+        json_valid = False
+        json_error = str(e)
+    except Exception as e:
+        flash(f'Error reading JSON file: {str(e)}', 'error')
+        return redirect(url_for('main.index'))
+
+    return render_template('json_viewer.html',
+        log_file=log_file,
+        json_content=json_content,
+        json_valid=json_valid,
+        json_error=json_error,
+        json_stats=json_stats
+    )
+
+
 @main_bp.route('/log/<int:file_id>')
 def view_log(file_id):
     """View log entries with filtering and search modes"""
@@ -817,6 +864,14 @@ def view_log(file_id):
     )
     if is_db_file:
         return redirect(url_for('main.view_db', file_id=file_id))
+
+    # Redirect .json files to the JSON viewer
+    is_json_file = (
+        log_file.filename.endswith('.json') or
+        (log_file.original_filename and log_file.original_filename.endswith('.json'))
+    )
+    if is_json_file:
+        return redirect(url_for('main.view_json', file_id=file_id))
 
     # Parse file if not already parsed
     if not log_file.parsed and file_path.exists():
