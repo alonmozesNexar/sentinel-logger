@@ -2702,7 +2702,19 @@ def ssh_connect_with_fallback(host, port, username, password, timeout=10):
     Returns (client, auth_method) or raises exception
     """
     import paramiko
+    import subprocess
     import time
+
+    # Remove stale known_hosts entry for this IP — different cameras share the
+    # same IP (e.g. 192.168.50.1) so the host key changes frequently.
+    try:
+        subprocess.run(
+            ['ssh-keygen', '-R', host],
+            capture_output=True, timeout=5
+        )
+        logger.debug(f"Cleared known_hosts entry for {host}")
+    except Exception as e:
+        logger.debug(f"ssh-keygen -R {host} skipped: {e}")
 
     auth_methods = []
 
