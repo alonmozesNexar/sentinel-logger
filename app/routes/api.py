@@ -5,6 +5,9 @@ from flask import request, jsonify, current_app
 from pathlib import Path
 from datetime import datetime
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.routes import api_bp
 from app import db
