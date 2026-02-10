@@ -335,12 +335,16 @@ class CameraDownloader:
                     return None, msg
 
             info = {}
+            raw_outputs = {}  # Debug: capture raw command outputs
 
             # 1. Try Nexar rtos_api basic_info (AONI: B0/B2/N1 cameras)
             try:
                 stdin, stdout, stderr = self.client.exec_command('rtos_api basic_info', timeout=10)
                 rtos_output = stdout.read().decode('utf-8', errors='ignore').strip()
-                if rtos_output and 'not found' not in rtos_output.lower():
+                rtos_err = stderr.read().decode('utf-8', errors='ignore').strip()
+                raw_outputs['rtos_api'] = rtos_output or rtos_err or '(empty)'
+                logger.info(f"rtos_api output: {rtos_output[:200] if rtos_output else '(empty)'}, stderr: {rtos_err[:200] if rtos_err else '(empty)'}")
+                if rtos_output and 'not found' not in rtos_output.lower() and 'no such file' not in rtos_output.lower():
                     info['platform'] = 'AONI (RTOS)'
                     for line in rtos_output.split('\n'):
                         line = line.strip()
@@ -350,15 +354,18 @@ class CameraDownloader:
                             val = val.strip()
                             if val:
                                 info[key] = val
-            except Exception:
-                pass
+            except Exception as e:
+                logger.info(f"rtos_api failed: {e}")
 
             # 2. Try Nexar_sdk_api (B4/Linux cameras) if rtos_api didn't work
             if 'device_sn' not in info and 'serial' not in info:
                 try:
                     stdin, stdout, stderr = self.client.exec_command('Nexar_sdk_api 2 5', timeout=10)
                     sdk_output = stdout.read().decode('utf-8', errors='ignore').strip()
-                    if sdk_output and 'not found' not in sdk_output.lower():
+                    sdk_err = stderr.read().decode('utf-8', errors='ignore').strip()
+                    raw_outputs['sdk_api'] = sdk_output or sdk_err or '(empty)'
+                    logger.info(f"Nexar_sdk_api output: {sdk_output[:200] if sdk_output else '(empty)'}, stderr: {sdk_err[:200] if sdk_err else '(empty)'}")
+                    if sdk_output and 'not found' not in sdk_output.lower() and 'no such file' not in sdk_output.lower():
                         info['platform'] = 'B4 (Linux)'
                         for line in sdk_output.split('\n'):
                             line = line.strip()
@@ -368,52 +375,73 @@ class CameraDownloader:
                                 val = val.strip()
                                 if val:
                                     info[key] = val
+                except Exception as e:
+                    logger.info(f"Nexar_sdk_api failed: {e}")
+
+            # 3. Get system info — run individual commands for compatibility with busybox
+            sys_commands = {
+                'hostname': 'hostname',
+                'uptime': 'uptime',
+                'kernel': 'uname -r',
+                'arch': 'uname -m',
+                'os': 'uname -o 2>/dev/null || uname -s',
+            }
+
+            for key, cmd in sys_commands.items():
+                try:
+                    stdin, stdout, stderr = self.client.exec_command(cmd, timeout=5)
+                    val = stdout.read().decode('utf-8', errors='ignore').strip()
+                    if val:
+                        info[key] = val
                 except Exception:
                     pass
 
-            # 3. Get system info in a single command
-            combined_cmd = (
-                'echo "HOSTNAME:$(hostname)"; '
-                'echo "UPTIME:$(uptime)"; '
-                'echo "KERNEL:$(uname -r)"; '
-                'echo "ARCH:$(uname -m)"; '
-                'echo "DISK:$(df -h / 2>/dev/null | tail -1)"; '
-                'echo "MEMORY:$(free -h 2>/dev/null | grep Mem || cat /proc/meminfo 2>/dev/null | head -3)"; '
-                'echo "IP_ADDR:$(ip -4 addr show 2>/dev/null | grep inet | grep -v 127.0.0.1 | head -1 | awk \'{print $2}\' || ifconfig 2>/dev/null | grep inet | grep -v 127.0.0.1 | head -1)"; '
-                'echo "SD_MOUNT:$(df -h /tmp/SD0 2>/dev/null | tail -1 || df -h /mnt/sdcard 2>/dev/null | tail -1 || echo none)"'
-            )
+            # Disk usage
+            try:
+                stdin, stdout, stderr = self.client.exec_command('df -h / 2>/dev/null | tail -1', timeout=5)
+                val = stdout.read().decode('utf-8', errors='ignore').strip()
+                if val:
+                    info['disk_usage'] = val
+            except Exception:
+                pass
 
-            stdin, stdout, stderr = self.client.exec_command(combined_cmd, timeout=15)
-            output = stdout.read().decode('utf-8', errors='ignore')
+            # Memory
+            try:
+                stdin, stdout, stderr = self.client.exec_command('free -h 2>/dev/null | grep -i mem || cat /proc/meminfo 2>/dev/null | head -3', timeout=5)
+                val = stdout.read().decode('utf-8', errors='ignore').strip()
+                if val:
+                    info['memory'] = val
+            except Exception:
+                pass
 
-            for line in output.strip().split('\n'):
-                if line.startswith('HOSTNAME:'):
-                    info['hostname'] = line[9:].strip()
-                elif line.startswith('UPTIME:'):
-                    info['uptime'] = line[7:].strip()
-                elif line.startswith('KERNEL:'):
-                    info['kernel'] = line[7:].strip()
-                elif line.startswith('ARCH:'):
-                    info['arch'] = line[5:].strip()
-                elif line.startswith('DISK:'):
-                    info['disk_usage'] = line[5:].strip()
-                elif line.startswith('MEMORY:'):
-                    info['memory'] = line[7:].strip()
-                elif line.startswith('IP_ADDR:'):
-                    val = line[8:].strip()
-                    if val:
-                        info['ip_address'] = val
-                elif line.startswith('SD_MOUNT:'):
-                    val = line[9:].strip()
-                    if val and val != 'none':
-                        info['sd_card_mount'] = val
+            # IP address
+            try:
+                stdin, stdout, stderr = self.client.exec_command("ip -4 addr show 2>/dev/null | grep 'inet ' | grep -v 127.0.0.1 | head -1 | awk '{print $2}' || ifconfig 2>/dev/null | grep 'inet ' | grep -v 127.0.0.1 | head -1", timeout=5)
+                val = stdout.read().decode('utf-8', errors='ignore').strip()
+                if val:
+                    info['ip_address'] = val
+            except Exception:
+                pass
 
+            # SD card
+            try:
+                stdin, stdout, stderr = self.client.exec_command('df -h /tmp/SD0 2>/dev/null | tail -1 || df -h /mnt/sdcard 2>/dev/null | tail -1', timeout=5)
+                val = stdout.read().decode('utf-8', errors='ignore').strip()
+                if val and '/tmp/SD0' in val or '/mnt/sdcard' in val:
+                    info['sd_card_mount'] = val
+            except Exception:
+                pass
+
+            logger.info(f"Camera info collected: {list(info.keys())}")
+
+            # Always return something — at minimum connection info
             if not info:
-                return None, "Failed to get camera info"
+                info['connection'] = f"Connected to {self.host} (auth: {self.auth_method})"
 
             return info, "Info retrieved successfully"
 
         except Exception as e:
+            logger.error(f"get_camera_info exception: {e}")
             return None, f"Failed to get camera info: {str(e)}"
 
     def __enter__(self):
