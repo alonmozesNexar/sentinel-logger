@@ -10,9 +10,40 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
+import os
+import subprocess
+
 import paramiko
 
 logger = logging.getLogger(__name__)
+
+
+# Cache the AWS firmware password
+_cached_fw_password = None
+
+def _get_fw_password():
+    """Get firmware password from AWS SSM Parameter Store (cached)."""
+    global _cached_fw_password
+    if _cached_fw_password is not None:
+        return _cached_fw_password
+    try:
+        env = os.environ.copy()
+        env['AWS_PROFILE'] = 'fw-ops'
+        cmd = [
+            'aws', 'ssm', 'get-parameter',
+            '--name', '/lockness/grant/fw-developer/prod/fw-password/key',
+            '--with-decryption',
+            '--region', 'us-west-1',
+            '--query', 'Parameter.Value',
+            '--output', 'text'
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, env=env)
+        if result.returncode == 0:
+            _cached_fw_password = result.stdout.strip()
+            return _cached_fw_password
+    except Exception:
+        pass
+    return None
 
 # Allowed directories for listing files (security: prevent directory traversal)
 ALLOWED_LOG_DIRECTORIES = ['/var/log', '/data/log', '/tmp', '/var/tmp']
@@ -64,7 +95,6 @@ class CameraDownloader:
 
     def connect(self):
         """Establish SSH connection to camera with retry and known_hosts cleanup"""
-        import subprocess
         import time
 
         # Remove stale known_hosts entry — different cameras share the same IP
@@ -79,8 +109,20 @@ class CameraDownloader:
 
         auth_methods = [
             ("ssh_key", dict(look_for_keys=True, allow_agent=True)),
-            ("password", dict(password=self.password, look_for_keys=False, allow_agent=False)),
         ]
+
+        # Try AWS firmware password (most cameras use this)
+        fw_password = _get_fw_password()
+        if fw_password:
+            auth_methods.append(("aws_ssm", dict(
+                password=fw_password, look_for_keys=False, allow_agent=False
+            )))
+
+        # User-provided password last
+        if self.password:
+            auth_methods.append(("password", dict(
+                password=self.password, look_for_keys=False, allow_agent=False
+            )))
 
         last_error = None
 
