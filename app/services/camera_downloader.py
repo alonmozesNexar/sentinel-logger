@@ -118,6 +118,11 @@ class CameraDownloader:
                 password=fw_password, look_for_keys=False, allow_agent=False
             )))
 
+        # Empty password (none auth - some cameras accept this)
+        auth_methods.append(("none_auth", dict(
+            password='', look_for_keys=False, allow_agent=False
+        )))
+
         # User-provided password last
         if self.password:
             auth_methods.append(("password", dict(
