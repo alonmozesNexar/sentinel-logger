@@ -2696,86 +2696,74 @@ def get_cached_fw_password():
 
 def ssh_connect_with_fallback(host, port, username, password, timeout=10):
     """
-    Try to connect via SSH using multiple methods:
-    1. Empty password (none auth - common for cameras)
-    2. SSH key (from default locations)
-    3. Password authentication (user-provided or AWS SSM)
+    Try to connect via SSH using multiple methods with retry on banner errors.
+    Cameras (dropbear) have limited connection slots, so we retry with backoff.
+    Auth order: SSH key → AWS SSM password → empty password → user password
     Returns (client, auth_method) or raises exception
     """
     import paramiko
-    import subprocess
-    from pathlib import Path
+    import time
 
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    auth_methods = []
 
-    # 1. Try empty password first (none auth - cameras often use this)
-    try:
-        client.connect(
-            hostname=host,
-            port=port,
-            username=username,
-            password='',
-            timeout=timeout,
-            look_for_keys=False,
-            allow_agent=False
-        )
-        return client, "none_auth"
-    except paramiko.AuthenticationException:
-        pass
-    except paramiko.SSHException:
-        pass
+    # 1. SSH key (most common for dev machines)
+    auth_methods.append(("ssh_key", dict(
+        look_for_keys=True, allow_agent=True
+    )))
 
-    # 2. Try SSH key authentication
-    try:
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(
-            hostname=host,
-            port=port,
-            username=username,
-            timeout=timeout,
-            look_for_keys=True,
-            allow_agent=True
-        )
-        return client, "ssh_key"
-    except paramiko.AuthenticationException:
-        pass
-    except paramiko.SSHException:
-        pass
-
-    # 3. Try AWS firmware password
+    # 2. AWS firmware password
     fw_password = get_cached_fw_password()
     if fw_password:
-        try:
+        auth_methods.append(("aws_ssm", dict(
+            password=fw_password, look_for_keys=False, allow_agent=False
+        )))
+
+    # 3. Empty password (none auth - some cameras)
+    auth_methods.append(("none_auth", dict(
+        password='', look_for_keys=False, allow_agent=False
+    )))
+
+    # 4. User-provided password
+    if password:
+        auth_methods.append(("password", dict(
+            password=password, look_for_keys=False, allow_agent=False
+        )))
+
+    last_error = None
+
+    for method_name, kwargs in auth_methods:
+        # Retry up to 3 times on banner/connection errors (dropbear rate limits)
+        for attempt in range(3):
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            client.connect(
-                hostname=host,
-                port=port,
-                username=username,
-                password=fw_password,
-                timeout=timeout,
-                look_for_keys=False,
-                allow_agent=False
-            )
-            return client, "aws_ssm"
-        except paramiko.AuthenticationException:
-            pass
-        except paramiko.SSHException:
-            pass
+            try:
+                client.connect(
+                    hostname=host,
+                    port=port,
+                    username=username,
+                    timeout=timeout,
+                    banner_timeout=timeout,
+                    **kwargs
+                )
+                return client, method_name
+            except paramiko.AuthenticationException:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+                break  # Wrong credentials, try next method
+            except (paramiko.SSHException, OSError, ConnectionError) as e:
+                last_error = e
+                try:
+                    client.close()
+                except Exception:
+                    pass
+                if attempt < 2:
+                    time.sleep(1 * (attempt + 1))  # 1s, 2s backoff
+                    continue
+                break  # Max retries for this method, try next
 
-    # 4. Try user-provided password
-    client.connect(
-        hostname=host,
-        port=port,
-        username=username,
-        password=password,
-        timeout=timeout,
-        look_for_keys=False,
-        allow_agent=False
-    )
-    return client, "password"
+    raise last_error or Exception("All SSH authentication methods failed")
 
 
 @api_bp.route('/stream/test-connection', methods=['POST'])
@@ -2809,18 +2797,23 @@ def test_ssh_connection():
             'message': f'Authentication failed. Check username/password for {host} or ensure SSH key is configured.'
         })
     except paramiko.SSHException as e:
+        error_msg = str(e)
+        if 'banner' in error_msg.lower() or 'Connection reset' in error_msg:
+            error_msg = f'Camera SSH refused the connection. The SSH service on {host} may be busy or not ready. Try again in a few seconds.'
         return jsonify({
             'success': False,
-            'message': f'SSH error: {str(e)}'
+            'message': error_msg
         })
     except Exception as e:
         error_msg = str(e)
         if 'Connection refused' in error_msg:
-            error_msg = f'Connection refused. Is SSH enabled on {host}:{port}?'
+            error_msg = f'SSH port {port} is not open on {host}. Ensure SSH is enabled on the camera.'
         elif 'timed out' in error_msg.lower() or 'timeout' in error_msg.lower():
-            error_msg = f'Connection timed out. Check if camera is reachable at {host}'
-        elif 'Connection reset' in error_msg:
-            error_msg = f'Connection reset. Camera at {host} may not be running SSH'
+            error_msg = f'Connection to {host} timed out. Check that the camera is powered on and connected to WiFi.'
+        elif 'No route to host' in error_msg:
+            error_msg = f'Cannot reach {host}. Check that your computer is connected to the camera\'s WiFi network.'
+        elif 'Connection reset' in error_msg or 'banner' in error_msg.lower():
+            error_msg = f'Camera SSH refused the connection. The SSH service on {host} may be busy. Try again in a few seconds.'
         return jsonify({
             'success': False,
             'message': error_msg
@@ -2884,7 +2877,19 @@ def stream_camera_logs():
             yield f"data: {json.dumps({'type': 'disconnected'})}\n\n"
 
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            error_msg = str(e)
+            # Provide user-friendly error messages
+            if 'Connection reset by peer' in error_msg or 'banner' in error_msg.lower():
+                error_msg = f"Camera SSH refused the connection ({host}). The camera's SSH service may be busy or not ready. Try again in a few seconds, or reboot the camera."
+            elif 'Connection refused' in error_msg:
+                error_msg = f"SSH port 22 is not open on {host}. Ensure SSH is enabled on the camera."
+            elif 'timed out' in error_msg.lower() or 'timeout' in error_msg.lower():
+                error_msg = f"Connection to {host} timed out. Check that the camera is powered on and connected to WiFi."
+            elif 'No route to host' in error_msg:
+                error_msg = f"Cannot reach {host}. Check that your computer is connected to the camera's WiFi network."
+            elif 'authentication' in error_msg.lower():
+                error_msg = f"Authentication failed for {username}@{host}. Check the password."
+            yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
 
     return Response(
         stream_with_context(generate()),

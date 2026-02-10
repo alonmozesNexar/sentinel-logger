@@ -241,14 +241,10 @@
     display: block;
 }
 
-/* Command input */
+/* Command display */
 #sshCommand {
     font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
     font-size: 0.9rem;
-}
-
-#commandPreset {
-    font-size: 0.85rem;
 }
 
 /* Source tabs */
@@ -383,27 +379,10 @@
         </div>
         <div class="col-md-5">
             <label class="form-label">Command</label>
-            <div class="input-group">
-                <select class="form-select" id="commandPreset" onchange="applyCommandPreset()" style="max-width: 140px;">
-                    <optgroup label="Presets">
-                        <option value="">Custom...</option>
-                        <option value="tail -n 100 -f /var/log/messages" selected>System Log</option>
-                        <option value="journalctl -f">journalctl -f</option>
-                        <option value="journalctl -f -u nexagons_one">nexagons_one</option>
-                        <option value="dmesg -w">dmesg -w</option>
-                        <option value="top -b -d 2">top (2s)</option>
-                        <option value="vmstat 2">vmstat</option>
-                        <option value="tail -f /tmp/video.log">Video Log</option>
-                        <option value="tail -f /tmp/audio.log">Audio Log</option>
-                    </optgroup>
-                    <optgroup label="History" id="commandHistory">
-                    </optgroup>
-                </select>
-                <input type="text" class="form-control" id="sshCommand" value="tail -n 100 -f /var/log/messages" placeholder="tail -f /var/log/messages">
-                <button class="btn btn-outline-secondary" type="button" onclick="clearCommandHistory()" title="Clear history">
-                    <i class="bi bi-clock-history"></i>
-                </button>
+            <div class="form-control bg-light text-muted" style="font-family: 'SF Mono', monospace; font-size: 0.85rem;">
+                <i class="bi bi-terminal me-1"></i>tail -n 1000 -f /var/log/messages
             </div>
+            <input type="hidden" id="sshCommand" value="tail -n 1000 -f /var/log/messages">
         </div>
         <div class="col-md-1">
             <button class="btn btn-outline-secondary w-100" onclick="testConnection()" id="btnTest" title="Test SSH connection">
@@ -443,7 +422,10 @@
         </div>
         <div class="col-md-5" id="socCommandDiv">
             <label class="form-label">Command</label>
-            <input type="text" class="form-control" id="serialCommand" value="tail -n 100 -f /var/log/messages" placeholder="tail -f /var/log/messages">
+            <div class="form-control bg-light text-muted" style="font-family: 'SF Mono', monospace; font-size: 0.85rem;">
+                <i class="bi bi-terminal me-1"></i>tail -n 1000 -f /var/log/messages
+            </div>
+            <input type="hidden" id="serialCommand" value="tail -n 1000 -f /var/log/messages">
         </div>
         <div class="col-md-5 d-none" id="mcuInfoDiv">
             <label class="form-label">Info</label>
@@ -458,8 +440,12 @@
         </div>
     </div>
 
-    <!-- Connection status alert -->
-    <div id="connectionAlert" class="alert mt-3 mb-0 d-none" role="alert"></div>
+    <!-- Connection status banner -->
+    <div id="connectionAlert" class="alert mt-3 mb-0 d-none" role="alert" style="font-size: 0.9rem;"></div>
+</div>
+
+<!-- Connection Info Banner (always visible during connection attempts) -->
+<div id="connectionBanner" class="d-none" style="padding: 10px 16px; border-radius: 8px; margin-bottom: 8px; font-size: 0.9rem; display: flex; align-items: center; gap: 8px;">
 </div>
 
 <!-- Stream Container -->
@@ -595,11 +581,10 @@ function testConnection() {
     const user = document.getElementById('cameraUser').value;
     const pass = document.getElementById('cameraPass').value;
     const btn = document.getElementById('btnTest');
-    const alert = document.getElementById('connectionAlert');
 
-    // Show loading state
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    showBanner('connecting', `Testing connection to ${host}:${port}...`);
 
     fetch('/api/stream/test-connection', {
         method: 'POST',
@@ -608,21 +593,14 @@ function testConnection() {
     })
     .then(r => r.json())
     .then(data => {
-        alert.classList.remove('d-none', 'alert-success', 'alert-danger');
         if (data.success) {
-            alert.classList.add('alert-success');
-            alert.innerHTML = `<i class="bi bi-check-circle me-2"></i>${data.message}`;
+            showBanner('connected', data.message);
         } else {
-            alert.classList.add('alert-danger');
-            alert.innerHTML = `<i class="bi bi-x-circle me-2"></i>${data.message}`;
+            showBanner('error', data.message);
         }
-        // Auto-hide after 5 seconds
-        setTimeout(() => alert.classList.add('d-none'), 5000);
     })
     .catch(err => {
-        alert.classList.remove('d-none', 'alert-success');
-        alert.classList.add('alert-danger');
-        alert.innerHTML = `<i class="bi bi-x-circle me-2"></i>Failed to test connection: ${err.message}`;
+        showBanner('error', `Failed to test connection: ${err.message}`);
     })
     .finally(() => {
         btn.disabled = false;
@@ -630,70 +608,6 @@ function testConnection() {
     });
 }
 
-// ============================================
-// Command History Management
-// ============================================
-const HISTORY_KEY = 'sentinel_command_history';
-const MAX_HISTORY = 20;
-
-function getCommandHistory() {
-    try {
-        return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
-    } catch {
-        return [];
-    }
-}
-
-function saveCommandToHistory(command) {
-    if (!command || command.trim() === '') return;
-
-    let history = getCommandHistory();
-
-    // Remove if already exists (will re-add at top)
-    history = history.filter(h => h.command !== command);
-
-    // Add to beginning with timestamp
-    history.unshift({
-        command: command,
-        timestamp: Date.now(),
-        label: command.length > 30 ? command.substring(0, 30) + '...' : command
-    });
-
-    // Keep only last MAX_HISTORY items
-    history = history.slice(0, MAX_HISTORY);
-
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-    renderCommandHistory();
-}
-
-function renderCommandHistory() {
-    const historyGroup = document.getElementById('commandHistory');
-    if (!historyGroup) return;
-
-    const history = getCommandHistory();
-    historyGroup.innerHTML = '';
-
-    if (history.length === 0) {
-        historyGroup.innerHTML = '<option disabled>No history yet</option>';
-        return;
-    }
-
-    history.forEach((item, index) => {
-        const option = document.createElement('option');
-        option.value = item.command;
-        const time = new Date(item.timestamp).toLocaleTimeString();
-        option.textContent = `${item.label}`;
-        option.title = item.command; // Full command on hover
-        historyGroup.appendChild(option);
-    });
-}
-
-function clearCommandHistory() {
-    if (confirm('Clear command history?')) {
-        localStorage.removeItem(HISTORY_KEY);
-        renderCommandHistory();
-    }
-}
 
 // ============================================
 // Connection Management
@@ -718,27 +632,44 @@ function connect() {
     }
 }
 
-function applyCommandPreset() {
-    const preset = document.getElementById('commandPreset').value;
-    if (preset) {
-        document.getElementById('sshCommand').value = preset;
+function showBanner(type, message) {
+    const banner = document.getElementById('connectionBanner');
+    if (!banner) return;
+    banner.className = '';
+    banner.style.cssText = 'padding: 10px 16px; border-radius: 8px; margin-bottom: 8px; font-size: 0.9rem; display: flex; align-items: center; gap: 8px;';
+    if (type === 'connecting') {
+        banner.style.background = '#eff6ff';
+        banner.style.border = '1px solid #bfdbfe';
+        banner.style.color = '#1e40af';
+        banner.innerHTML = `<span class="spinner-border spinner-border-sm"></span> ${message}`;
+    } else if (type === 'connected') {
+        banner.style.background = '#f0fdf4';
+        banner.style.border = '1px solid #bbf7d0';
+        banner.style.color = '#166534';
+        banner.innerHTML = `<i class="bi bi-check-circle-fill"></i> ${message}`;
+        setTimeout(() => { banner.style.display = 'none'; }, 4000);
+    } else if (type === 'error') {
+        banner.style.background = '#fef2f2';
+        banner.style.border = '1px solid #fecaca';
+        banner.style.color = '#991b1b';
+        banner.innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i> ${message}`;
     }
 }
 
+function hideBanner() {
+    const banner = document.getElementById('connectionBanner');
+    if (banner) banner.style.display = 'none';
+}
+
 function connectCamera() {
-    console.log('connectCamera() started');
     const host = document.getElementById('cameraHost').value;
     const port = document.getElementById('cameraPort').value;
     const user = document.getElementById('cameraUser').value;
     const pass = document.getElementById('cameraPass').value;
     const command = document.getElementById('sshCommand').value;
-    const alert = document.getElementById('connectionAlert');
-    console.log('SSH params:', { host, port, user, command });
-
-    // Hide any previous alerts
-    alert.classList.add('d-none');
 
     setStatus('connecting', 'Connecting...');
+    showBanner('connecting', `Connecting to ${host}:${port} via SSH...`);
 
     const url = `/api/stream/camera?host=${encodeURIComponent(host)}&port=${port}&username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&command=${encodeURIComponent(command)}`;
 
@@ -753,36 +684,25 @@ function connectCamera() {
         clearLogOutput();
     };
 
-    streamState.commandSaved = false; // Track if we saved this command
-
     streamState.eventSource.onmessage = function(event) {
         try {
             const data = JSON.parse(event.data);
 
             if (data.type === 'connected') {
                 setStatus('connected', `${host}: ${data.command || 'streaming'}`);
-                // Hide alert on successful connection
-                alert.classList.add('d-none');
+                showBanner('connected', `Connected to ${host} — streaming logs`);
             } else if (data.type === 'log') {
-                // Save command to history on first successful output
-                if (!streamState.commandSaved && streamState.currentCommand) {
-                    saveCommandToHistory(streamState.currentCommand);
-                    streamState.commandSaved = true;
-                }
                 addLogLine(data.content);
             } else if (data.type === 'error') {
                 setStatus('error', 'Connection Error');
-                // Show detailed error in alert
-                alert.classList.remove('d-none', 'alert-success');
-                alert.classList.add('alert-danger');
-                alert.innerHTML = `<i class="bi bi-x-circle me-2"></i><strong>Error:</strong> ${data.message}`;
+                showBanner('error', data.message);
                 addLogLine(`[ERROR] ${data.message}`, 'error');
-                // Auto disconnect on error
                 disconnect();
             } else if (data.type === 'disconnected') {
                 setStatus('disconnected', 'Disconnected');
                 streamState.connected = false;
                 updateConnectButton(false);
+                hideBanner();
             }
         } catch (e) {
             console.error('Parse error:', e);
@@ -790,19 +710,11 @@ function connectCamera() {
     };
 
     streamState.eventSource.onerror = function(e) {
+        // Close immediately to prevent EventSource auto-reconnect loop
+        disconnect();
         const host = document.getElementById('cameraHost').value;
-        const alert = document.getElementById('connectionAlert');
-
         setStatus('error', 'Connection failed');
-        streamState.connected = false;
-        updateConnectButton(false);
-
-        // Show helpful error message
-        alert.classList.remove('d-none', 'alert-success');
-        alert.classList.add('alert-danger');
-        alert.innerHTML = `<i class="bi bi-x-circle me-2"></i><strong>Connection failed to ${host}</strong><br>
-            <small>Possible causes: Camera not connected, SSH not enabled, wrong IP/port, or network issue.
-            Click the <i class="bi bi-plug"></i> button to test the connection.</small>`;
+        showBanner('error', `Connection failed to ${host}. Camera not connected, SSH not enabled, wrong IP/port, or network issue.`);
     };
 }
 
@@ -1232,18 +1144,15 @@ function testSerialConnection() {
     const baud = document.getElementById('serialBaud').value;
     const mode = document.getElementById('serialMode').value;
     const btn = document.getElementById('btnTestSerial');
-    const alert = document.getElementById('connectionAlert');
 
     if (!port) {
-        alert.classList.remove('d-none', 'alert-success');
-        alert.classList.add('alert-danger');
-        alert.innerHTML = '<i class="bi bi-x-circle me-2"></i>Please select a serial port first';
+        showBanner('error', 'Please select a serial port first');
         return;
     }
 
-    // Show loading state
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    showBanner('connecting', `Testing serial connection on ${port}...`);
 
     fetch('/api/stream/serial/test', {
         method: 'POST',
@@ -1252,20 +1161,14 @@ function testSerialConnection() {
     })
     .then(r => r.json())
     .then(data => {
-        alert.classList.remove('d-none', 'alert-success', 'alert-danger');
         if (data.success) {
-            alert.classList.add('alert-success');
-            alert.innerHTML = `<i class="bi bi-check-circle me-2"></i>${data.message}`;
+            showBanner('connected', data.message);
         } else {
-            alert.classList.add('alert-danger');
-            alert.innerHTML = `<i class="bi bi-x-circle me-2"></i>${data.message}`;
+            showBanner('error', data.message);
         }
-        setTimeout(() => alert.classList.add('d-none'), 5000);
     })
     .catch(err => {
-        alert.classList.remove('d-none', 'alert-success');
-        alert.classList.add('alert-danger');
-        alert.innerHTML = `<i class="bi bi-x-circle me-2"></i>Failed to test connection: ${err.message}`;
+        showBanner('error', `Failed to test connection: ${err.message}`);
     })
     .finally(() => {
         btn.disabled = false;
@@ -1277,38 +1180,24 @@ function testSerialConnection() {
 // Serial Connection
 // ============================================
 function connectSerial() {
-    console.log('connectSerial() started');
     const portEl = document.getElementById('serialPort');
     const baudEl = document.getElementById('serialBaud');
     const modeEl = document.getElementById('serialMode');
     const commandEl = document.getElementById('serialCommand');
-    const alertEl = document.getElementById('connectionAlert');
 
     const port = portEl ? portEl.value : '';
     const baud = baudEl ? baudEl.value : '115200';
     const mode = modeEl ? modeEl.value : 'soc';
     const command = commandEl ? commandEl.value : '';
 
-    console.log('Serial params:', { port, baud, mode, command });
-
     if (!port) {
-        console.log('No port selected');
-        if (alertEl) {
-            alertEl.classList.remove('d-none', 'alert-success');
-            alertEl.classList.add('alert-danger');
-            alertEl.innerHTML = '<i class="bi bi-x-circle me-2"></i>Please select a serial port first';
-        }
+        showBanner('error', 'Please select a serial port first');
         return;
     }
 
-    // Hide any previous alerts
-    if (alertEl) {
-        alertEl.classList.add('d-none');
-    }
-
     setStatus('connecting', 'Connecting...');
+    showBanner('connecting', `Connecting to ${port} via Serial (${mode.toUpperCase()})...`);
 
-    // Build URL with parameters
     let url = `/api/stream/serial?port=${encodeURIComponent(port)}&baud=${baud}&mode=${mode}`;
     if (mode === 'soc' && command) {
         url += `&command=${encodeURIComponent(command)}`;
@@ -1325,35 +1214,25 @@ function connectSerial() {
         clearLogOutput();
     };
 
-    streamState.commandSaved = false;
-
     streamState.eventSource.onmessage = function(event) {
         try {
             const data = JSON.parse(event.data);
-            const alertEl = document.getElementById('connectionAlert');
 
             if (data.type === 'connected') {
                 setStatus('connected', `${port}: ${data.mode || 'streaming'}`);
-                if (alertEl) alertEl.classList.add('d-none');
+                showBanner('connected', `Connected to ${port} — streaming logs`);
             } else if (data.type === 'log') {
-                if (!streamState.commandSaved && mode === 'soc' && streamState.currentCommand) {
-                    saveCommandToHistory(streamState.currentCommand);
-                    streamState.commandSaved = true;
-                }
                 addLogLine(data.content);
             } else if (data.type === 'error') {
                 setStatus('error', 'Connection Error');
-                if (alertEl) {
-                    alertEl.classList.remove('d-none', 'alert-success');
-                    alertEl.classList.add('alert-danger');
-                    alertEl.innerHTML = `<i class="bi bi-x-circle me-2"></i><strong>Error:</strong> ${data.message}`;
-                }
+                showBanner('error', data.message);
                 addLogLine(`[ERROR] ${data.message}`, 'error');
                 disconnect();
             } else if (data.type === 'disconnected') {
                 setStatus('disconnected', 'Disconnected');
                 streamState.connected = false;
                 updateConnectButton(false);
+                hideBanner();
             }
         } catch (e) {
             console.error('Parse error:', e);
@@ -1361,17 +1240,10 @@ function connectSerial() {
     };
 
     streamState.eventSource.onerror = function(e) {
+        // Close immediately to prevent EventSource auto-reconnect loop
+        disconnect();
         setStatus('error', 'Connection failed');
-        streamState.connected = false;
-        updateConnectButton(false);
-
-        const alertEl = document.getElementById('connectionAlert');
-        if (alertEl) {
-            alertEl.classList.remove('d-none', 'alert-success');
-            alertEl.classList.add('alert-danger');
-            alertEl.innerHTML = `<i class="bi bi-x-circle me-2"></i><strong>Serial connection failed</strong><br>
-                <small>Check that the serial port is not in use by another application.</small>`;
-        }
+        showBanner('error', `Serial connection failed. Check that ${port} is not in use by another application.`);
     };
 }
 
@@ -1382,10 +1254,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Auto-scroll button starts active
     document.getElementById('btnAutoscroll').classList.add('active');
 
-    // Load command history
-    renderCommandHistory();
-
-    // Add click handler for connect button (backup for onclick)
+    // Add click handler for connect button
     const btnConnect = document.getElementById('btnConnect');
     if (btnConnect) {
         console.log('Connect button found, adding click listener');
