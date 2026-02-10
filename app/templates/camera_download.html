@@ -167,14 +167,28 @@ function getFormData() {
 }
 
 function showStatus(message, type) {
-    const statusEl = document.getElementById('connectionStatus');
+    let statusEl = document.getElementById('connectionStatus');
+    if (!statusEl) {
+        // Create it dynamically if missing (e.g. cached page)
+        statusEl = document.createElement('div');
+        statusEl.id = 'connectionStatus';
+        const form = document.getElementById('downloadForm');
+        if (form) {
+            const hr = form.querySelector('hr');
+            if (hr) form.insertBefore(statusEl, hr);
+            else form.prepend(statusEl);
+        } else {
+            document.body.prepend(statusEl);
+        }
+    }
     statusEl.className = `alert alert-${type}`;
     statusEl.innerHTML = message;
-    statusEl.classList.remove('d-none');
+    statusEl.style.display = '';
 }
 
 function hideStatus() {
-    document.getElementById('connectionStatus').classList.add('d-none');
+    const el = document.getElementById('connectionStatus');
+    if (el) el.style.display = 'none';
 }
 
 function setButtonsLoading(loading) {
