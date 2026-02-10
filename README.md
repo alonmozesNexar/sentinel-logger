@@ -1,77 +1,75 @@
 # Sentinel Logger
 
-A desktop/web application for QA testers to analyze camera and hardware log files. Automatically detects errors, warnings, and issues, visualizes log data, and helps create bug reports efficiently.
-
-Install with `pip install git+https://github.com/alonmozesNexar/sentinel-logger.git` and run `sentinel-logger`.
-
-## Features
-
-### 1. Error Detection
-- Automatically identifies and highlights errors, warnings, and critical issues
-- Pattern-based detection for common camera/hardware problems:
-  - Crashes and memory issues
-  - Connection timeouts and network failures
-  - Recording failures and frame drops
-  - Storage errors and data corruption
-  - Thermal issues and battery warnings
-  - Lens and optical system errors
-
-### 2. Search and Filter
-- Full-text search across all log entries
-- Filter by severity level (Critical, Error, Warning, Info, Debug)
-- Filter by service (video, audio, network, storage, etc.)
-- Time-based filtering
-- Pagination for large log files
-
-### 3. Bug Report Generation
-- Create detailed bug reports from detected issues
-- Multiple template formats:
-  - Default (Markdown)
-  - Jira
-  - GitHub Issues
-  - Minimal
-- Auto-populated fields:
-  - Title and description
-  - Environment/device information
-  - Log context and affected lines
-  - Severity and category
-- Export options: Markdown, JSON, Plain Text
-
-### 4. Log Visualization
-- Interactive charts powered by Chart.js:
-  - Severity distribution (pie chart)
-  - Errors over time (line chart)
-  - Errors by service (bar chart)
-  - Hourly error distribution
-  - Issue categories
-
-## Installation
-
-### Quick Install (recommended)
+A local web tool to analyze camera log files. Upload logs manually, download them from S3 or directly from a camera over SSH, and get automatic error detection and log visualization.
 
 ```bash
 pip install git+https://github.com/alonmozesNexar/sentinel-logger.git
 sentinel-logger
 ```
 
-The browser opens automatically to `http://localhost:9898`.
+Opens at `http://localhost:9898`.
+
+---
+
+## What It Does
+
+### Get Logs Into the Tool
+
+| Feature | Description |
+|---------|-------------|
+| **Upload File** | Upload `.log`, `.txt`, `.csv`, `.db`, `.json`, `.xml`, `.zip`, `.gz` files (up to 500 MB). |
+| **Paste Text** | Paste log content directly into the browser — no file needed. |
+| **S3 Download** | Browse and download logs from the `sdk-logs-prod` S3 bucket by serial number and date. |
+| **Camera Download (SSH)** | Connect to a camera over SSH, list log files, download them, and view device info (model, serial, firmware). |
+| **Live Stream** | Tail `/var/log/messages` in real-time from a camera via SSH or Serial. |
+
+### Analyze Logs
+
+| Feature | Description |
+|---------|-------------|
+| **Log Viewer** | View parsed log entries with search (contains, regex, exact match), filter by severity, service, and component. |
+| **DB Viewer** | Browse SQLite `.db` files — table browser with search, sort, and pagination. |
+| **Error Detection** | Pattern-based detection of crashes, timeouts, memory issues, recording failures, thermal warnings, and more. |
+
+### Other
+
+| Feature | Description |
+|---------|-------------|
+| **Command Palette** | Press `Ctrl+K` / `Cmd+K` to quickly navigate to any page or action. |
+| **Dark Mode** | Toggle between light and dark themes. |
+| **System Stats** | Live CPU, memory, and network usage in the navbar. |
+
+---
+
+## Installation
+
+### Requirements
+
+- Python 3.9+
+- pip
+
+### Install
+
+```bash
+pip install git+https://github.com/alonmozesNexar/sentinel-logger.git
+```
+
+### Run
+
+```bash
+sentinel-logger
+```
+
+The browser opens automatically. To change port or host:
+
+```bash
+sentinel-logger --port 5000 --host 0.0.0.0
+```
 
 ### Update
 
 ```bash
 pip install --upgrade git+https://github.com/alonmozesNexar/sentinel-logger.git
-```
-
-### Optional Configuration
-
-**S3 log downloads** — configure AWS credentials:
-```bash
-aws configure sso  # or set up ~/.aws/config with your profiles
-```
-
-**AI analysis** — add an API key to a `.env` file in your working directory:
-```
-ANTHROPIC_API_KEY=sk-...
 ```
 
 ### CLI Options
@@ -80,169 +78,109 @@ ANTHROPIC_API_KEY=sk-...
 sentinel-logger [--port PORT] [--host HOST] [--no-browser] [--no-update-check] [--debug]
 ```
 
-### Development Setup
+---
 
-1. Clone the repository:
+## Setting Up AWS SSO for S3 Log Downloads
+
+To download logs from S3 (`sdk-logs-prod` bucket), you need AWS credentials. The recommended method is **AWS SSO**.
+
+### Step 1: Configure SSO Profile
+
+Run the AWS SSO configuration wizard:
+
+```bash
+aws configure sso
+```
+
+When prompted, enter:
+
+| Prompt | Value |
+|--------|-------|
+| SSO session name | `nexar` (or any name) |
+| SSO start URL | Your organization's SSO URL (e.g., `https://nexar.awsapps.com/start`) |
+| SSO region | `us-east-1` |
+| Account | Select the account that has access to `sdk-logs-prod` |
+| Role | Select your role (e.g., `ReadOnlyAccess` or `PowerUserAccess`) |
+| CLI default client Region | `us-east-1` |
+| CLI default output format | `json` |
+| CLI profile name | `nexar-sso` (or any name you prefer) |
+
+This creates a profile in `~/.aws/config`.
+
+### Step 2: Log In
+
+```bash
+aws sso login --profile nexar-sso
+```
+
+A browser window opens for authentication. After login, your credentials are cached locally.
+
+### Step 3: Tell Sentinel Logger Which Profile to Use
+
+Set the `AWS_PROFILE` environment variable before running:
+
+```bash
+export AWS_PROFILE=nexar-sso
+sentinel-logger
+```
+
+Or add it to a `.env` file in your working directory:
+
+```
+AWS_PROFILE=nexar-sso
+```
+
+### Step 4: Verify
+
+In Sentinel Logger, go to the **S3 Download** page. The status banner should show "Connected to S3 using profile: nexar-sso".
+
+### Refreshing Expired Credentials
+
+SSO tokens expire after a few hours. When they expire, the S3 page will show an error. Just re-run:
+
+```bash
+aws sso login --profile nexar-sso
+```
+
+Then refresh the S3 page in the browser.
+
+---
+
+## Optional: Camera SSH Connection
+
+The tool connects to cameras at `192.168.50.1` by default (configurable). Authentication is automatic:
+
+1. SSH key
+2. AWS firmware password (from SSM Parameter Store, requires `fw-ops` AWS profile)
+3. Empty password (none auth)
+4. User-provided password
+
+No setup needed if your SSH keys or AWS profiles are already configured.
+
+To override defaults, set environment variables or use a `.env` file:
+
+```
+CAMERA_IP=192.168.50.1
+CAMERA_USER=root
+CAMERA_PASSWORD=root
+CAMERA_SSH_PORT=22
+```
+
+---
+
+## Development Setup
+
 ```bash
 git clone https://github.com/alonmozesNexar/sentinel-logger.git
 cd sentinel-logger
-```
-
-2. Create a virtual environment:
-```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-```
-
-3. Run:
-```bash
 python main.py
 ```
 
-## Usage
-
-### Uploading Log Files
-1. Click "Upload" in the navigation bar
-2. Drag and drop a log file or click "Browse Files"
-3. Supported formats: `.log`, `.txt`, `.csv`
-4. Maximum file size: 500MB
-
-### Analyzing Logs
-1. After upload, the system automatically parses and analyzes the log
-2. View the analysis dashboard showing:
-   - Error and warning counts
-   - Detected issues with severity
-   - Log preview with filtering options
-
-### Viewing Issues
-1. Navigate to "Issues" to see all detected issues
-2. Filter by severity or status
-3. Click on an issue for detailed view with log context
-
-### Creating Bug Reports
-1. From an issue detail page, click "Create Bug Report"
-2. Select a template format
-3. Add reproduction steps and additional context
-4. Export or copy the report
-
-### Viewing Charts
-1. From the analysis page, click "Charts"
-2. Interactive visualizations show:
-   - Error distribution
-   - Timeline trends
-   - Service-level analysis
-
-## Project Structure
-
-```
-qa tool/
-|-- main.py                 # Application entry point
-|-- config.py               # Configuration settings
-|-- requirements.txt        # Python dependencies
-|-- README.md               # This file
-|-- app/
-|   |-- __init__.py         # Flask application factory
-|   |-- models/
-|   |   |-- __init__.py     # Database models
-|   |-- routes/
-|   |   |-- __init__.py     # Blueprint registration
-|   |   |-- views.py        # HTML view routes
-|   |   |-- api.py          # REST API endpoints
-|   |-- services/
-|   |   |-- __init__.py     # Service exports
-|   |   |-- log_parser.py   # Log parsing engine
-|   |   |-- issue_detector.py   # Issue detection
-|   |   |-- bug_report_generator.py  # Bug report creation
-|   |   |-- analytics.py    # Chart data generation
-|   |-- templates/          # HTML templates
-|   |-- static/
-|       |-- css/style.css   # Custom styles
-|       |-- js/main.js      # JavaScript utilities
-|-- uploads/                # Uploaded log files
-|-- sample_logs/            # Sample log files for testing
-```
-
-## API Endpoints
-
-### Log Files
-- `GET /api/log-files` - List all log files
-- `GET /api/log-files/<id>` - Get log file details
-- `GET /api/log-files/<id>/entries` - Get log entries with pagination
-- `GET /api/log-files/<id>/issues` - Get issues for a log file
-- `GET /api/log-files/<id>/charts` - Get chart data
-- `GET /api/log-files/<id>/stats` - Get statistics
-
-### Issues
-- `GET /api/issues` - List all issues
-- `GET /api/issues/<id>` - Get issue details
-- `PATCH /api/issues/<id>` - Update issue status
-- `GET /api/issues/<id>/context` - Get log context for issue
-
-### Bug Reports
-- `GET /api/bug-reports` - List all bug reports
-- `GET /api/bug-reports/<id>` - Get bug report details
-- `POST /api/bug-reports` - Create a new bug report
-
-### Search
-- `GET /api/search?q=<query>` - Search log entries
-- `GET /api/services` - List unique services
-
-## Log Format Support
-
-The parser supports various log formats commonly used in camera/hardware testing:
-
-### Timestamp Formats
-- ISO 8601: `2024-01-15T14:30:25.123Z`
-- Standard: `2024-01-15 14:30:25`
-- US format: `01/15/2024 14:30:25`
-- Time only: `14:30:25.123`
-
-### Severity Levels
-- CRITICAL / CRIT / FATAL
-- ERROR / ERR / FAIL
-- WARNING / WARN
-- INFO / NOTICE
-- DEBUG / TRACE
-
-### Detected Services
-- video-service
-- audio-service
-- network-service
-- storage-service
-- firmware-service
-- sensor-service
-- power-service
-- lens-service
-- image-processor
-- ui-service
-
-## Configuration
-
-Edit `config.py` to customize:
-
-```python
-class Config:
-    SECRET_KEY = 'your-secret-key'
-    UPLOAD_FOLDER = Path('uploads')
-    MAX_CONTENT_LENGTH = 500 * 1024 * 1024  # 500MB
-    ALLOWED_EXTENSIONS = {'log', 'txt', 'csv'}
-```
-
-## Technology Stack
-
-- **Backend**: Flask (Python web framework)
-- **Database**: SQLite with SQLAlchemy ORM
-- **Frontend**: Bootstrap 5, Chart.js
-- **Log Parsing**: Custom regex-based parser with chardet for encoding detection
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+---
 
 ## License
 
-MIT License - feel free to use and modify for your QA testing needs.
+MIT
