@@ -91,7 +91,7 @@ def upload():
             flash(f'File "{filename}" uploaded successfully!', 'success')
             return redirect(url_for('main.view_log', file_id=log_file.id))
         else:
-            flash('File type not allowed. Please upload .log or .txt files.', 'error')
+            flash('File type not allowed. Supported: .log, .txt, .db, .sqlite, .csv, .json, .xml, .zip, .gz', 'error')
             return redirect(request.url)
 
     return render_template('upload.html')
