@@ -63,7 +63,7 @@ sentinel-logger
 The browser opens automatically. To change port or host:
 
 ```bash
-sentinel-logger --port 5000 --host 0.0.0.0
+sentinel-logger --port 9898 --host 0.0.0.0
 ```
 
 ### Update
