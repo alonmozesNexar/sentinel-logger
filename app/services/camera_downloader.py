@@ -326,7 +326,7 @@ class CameraDownloader:
             return ""
 
     def get_camera_info(self):
-        """Get basic info about the camera"""
+        """Get detailed camera info including Nexar-specific data"""
         try:
             # Connect once for all commands
             if not self.client or not self.transport:
@@ -336,32 +336,79 @@ class CameraDownloader:
 
             info = {}
 
-            # Get all info in a single command to minimize round trips
+            # 1. Try Nexar rtos_api basic_info (AONI: B0/B2/N1 cameras)
+            try:
+                stdin, stdout, stderr = self.client.exec_command('rtos_api basic_info', timeout=10)
+                rtos_output = stdout.read().decode('utf-8', errors='ignore').strip()
+                if rtos_output and 'not found' not in rtos_output.lower():
+                    info['platform'] = 'AONI (RTOS)'
+                    for line in rtos_output.split('\n'):
+                        line = line.strip()
+                        if ':' in line:
+                            key, _, val = line.partition(':')
+                            key = key.strip().lower().replace(' ', '_')
+                            val = val.strip()
+                            if val:
+                                info[key] = val
+            except Exception:
+                pass
+
+            # 2. Try Nexar_sdk_api (B4/Linux cameras) if rtos_api didn't work
+            if 'device_sn' not in info and 'serial' not in info:
+                try:
+                    stdin, stdout, stderr = self.client.exec_command('Nexar_sdk_api 2 5', timeout=10)
+                    sdk_output = stdout.read().decode('utf-8', errors='ignore').strip()
+                    if sdk_output and 'not found' not in sdk_output.lower():
+                        info['platform'] = 'B4 (Linux)'
+                        for line in sdk_output.split('\n'):
+                            line = line.strip()
+                            if ':' in line:
+                                key, _, val = line.partition(':')
+                                key = key.strip().lower().replace(' ', '_')
+                                val = val.strip()
+                                if val:
+                                    info[key] = val
+                except Exception:
+                    pass
+
+            # 3. Get system info in a single command
             combined_cmd = (
                 'echo "HOSTNAME:$(hostname)"; '
                 'echo "UPTIME:$(uptime)"; '
-                'echo "DISK:$(df -h / | tail -1)"; '
-                'echo "MEMORY:$(free -h 2>/dev/null | grep Mem || cat /proc/meminfo | head -1)"; '
-                'echo "KERNEL:$(uname -r)"'
+                'echo "KERNEL:$(uname -r)"; '
+                'echo "ARCH:$(uname -m)"; '
+                'echo "DISK:$(df -h / 2>/dev/null | tail -1)"; '
+                'echo "MEMORY:$(free -h 2>/dev/null | grep Mem || cat /proc/meminfo 2>/dev/null | head -3)"; '
+                'echo "IP_ADDR:$(ip -4 addr show 2>/dev/null | grep inet | grep -v 127.0.0.1 | head -1 | awk \'{print $2}\' || ifconfig 2>/dev/null | grep inet | grep -v 127.0.0.1 | head -1)"; '
+                'echo "SD_MOUNT:$(df -h /tmp/SD0 2>/dev/null | tail -1 || df -h /mnt/sdcard 2>/dev/null | tail -1 || echo none)"'
             )
 
-            stdin, stdout, stderr = self.client.exec_command(combined_cmd, timeout=30)
+            stdin, stdout, stderr = self.client.exec_command(combined_cmd, timeout=15)
             output = stdout.read().decode('utf-8', errors='ignore')
 
-            # Parse the output
             for line in output.strip().split('\n'):
                 if line.startswith('HOSTNAME:'):
                     info['hostname'] = line[9:].strip()
                 elif line.startswith('UPTIME:'):
                     info['uptime'] = line[7:].strip()
+                elif line.startswith('KERNEL:'):
+                    info['kernel'] = line[7:].strip()
+                elif line.startswith('ARCH:'):
+                    info['arch'] = line[5:].strip()
                 elif line.startswith('DISK:'):
                     info['disk_usage'] = line[5:].strip()
                 elif line.startswith('MEMORY:'):
                     info['memory'] = line[7:].strip()
-                elif line.startswith('KERNEL:'):
-                    info['kernel'] = line[7:].strip()
+                elif line.startswith('IP_ADDR:'):
+                    val = line[8:].strip()
+                    if val:
+                        info['ip_address'] = val
+                elif line.startswith('SD_MOUNT:'):
+                    val = line[9:].strip()
+                    if val and val != 'none':
+                        info['sd_card_mount'] = val
 
-            if not info.get('hostname'):
+            if not info:
                 return None, "Failed to get camera info"
 
             return info, "Info retrieved successfully"

@@ -234,12 +234,64 @@ function getCameraInfo() {
             const panel = document.getElementById('cameraInfoPanel');
             const content = document.getElementById('cameraInfoContent');
 
-            let html = '<table class="table table-sm table-borderless mb-0">';
-            if (result.info.hostname) html += `<tr><td><strong>Hostname:</strong></td><td>${result.info.hostname}</td></tr>`;
-            if (result.info.kernel) html += `<tr><td><strong>Kernel:</strong></td><td>${result.info.kernel}</td></tr>`;
-            if (result.info.uptime) html += `<tr><td><strong>Uptime:</strong></td><td>${result.info.uptime}</td></tr>`;
-            if (result.info.memory) html += `<tr><td><strong>Memory:</strong></td><td>${result.info.memory}</td></tr>`;
-            if (result.info.disk_usage) html += `<tr><td><strong>Disk:</strong></td><td>${result.info.disk_usage}</td></tr>`;
+            const i = result.info;
+            let html = '';
+
+            // Nexar camera fields (from rtos_api / Nexar_sdk_api)
+            const nexarFields = [
+                ['platform', 'Platform'],
+                ['model', 'Model'],
+                ['device_sn', 'Serial Number'],
+                ['sw_version', 'Firmware'],
+                ['hw_version', 'Hardware Version'],
+                ['battery_info', 'Battery'],
+                ['battery_percentage', 'Battery %'],
+                ['battery_voltage', 'Battery Voltage'],
+                ['sd_card_info', 'SD Card'],
+                ['sd_total_mb', 'SD Total'],
+                ['sd_free_mb', 'SD Free'],
+                ['wifi_mac', 'WiFi MAC'],
+                ['bt_mac', 'Bluetooth MAC'],
+            ];
+
+            // System fields
+            const sysFields = [
+                ['hostname', 'Hostname'],
+                ['kernel', 'Kernel'],
+                ['arch', 'Architecture'],
+                ['ip_address', 'IP Address'],
+                ['uptime', 'Uptime'],
+                ['memory', 'Memory'],
+                ['disk_usage', 'Root Disk'],
+                ['sd_card_mount', 'SD Card Mount'],
+            ];
+
+            // Render Nexar section if any fields present
+            const hasNexar = nexarFields.some(([k]) => i[k]);
+            if (hasNexar) {
+                html += '<div class="mb-2"><strong class="text-primary"><i class="bi bi-camera-video me-1"></i>Camera</strong></div>';
+                html += '<table class="table table-sm table-borderless mb-2">';
+                nexarFields.forEach(([key, label]) => {
+                    if (i[key]) html += `<tr><td style="width:140px"><strong>${label}:</strong></td><td><code>${i[key]}</code></td></tr>`;
+                });
+                html += '</table>';
+            }
+
+            // Render system section
+            html += '<div class="mb-2"><strong class="text-secondary"><i class="bi bi-cpu me-1"></i>System</strong></div>';
+            html += '<table class="table table-sm table-borderless mb-0">';
+            sysFields.forEach(([key, label]) => {
+                if (i[key]) html += `<tr><td style="width:140px"><strong>${label}:</strong></td><td><code>${i[key]}</code></td></tr>`;
+            });
+
+            // Show any extra fields not in the predefined lists
+            const knownKeys = new Set([...nexarFields.map(f=>f[0]), ...sysFields.map(f=>f[0]), 'success']);
+            Object.keys(i).forEach(key => {
+                if (!knownKeys.has(key) && i[key]) {
+                    const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                    html += `<tr><td style="width:140px"><strong>${label}:</strong></td><td><code>${i[key]}</code></td></tr>`;
+                }
+            });
             html += '</table>';
 
             content.innerHTML = html;
