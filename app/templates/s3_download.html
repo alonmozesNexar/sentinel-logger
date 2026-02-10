@@ -588,23 +588,13 @@ let currentTypeFilter = 'all';
 let isLoading = false;
 let batchDownloadCancelled = false;
 
+// Map Bootstrap alert types to global banner types
+const _s3BannerId = 's3DownloadBanner';
 function showStatus(message, type) {
-    const el = document.getElementById('statusMessage');
-    if (el) {
-        el.className = `alert alert-${type}`;
-        el.innerHTML = message;
-        el.classList.remove('d-none');
-    } else {
-        console.log('Status:', type, message);
-    }
+    const typeMap = { danger: 'error', success: 'success', info: 'info', warning: 'warning' };
+    showBanner(typeMap[type] || type, message, { containerId: _s3BannerId });
 }
-
-function hideStatus() {
-    const el = document.getElementById('statusMessage');
-    if (el) {
-        el.classList.add('d-none');
-    }
-}
+function hideStatus() { hideBanner(_s3BannerId); }
 
 function setLoading(loading) {
     isLoading = loading;

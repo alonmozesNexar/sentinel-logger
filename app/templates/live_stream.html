@@ -584,7 +584,7 @@ function testConnection() {
 
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-    showBanner('connecting', `Testing connection to ${host}:${port}...`);
+    showLiveBanner('connecting', `Testing connection to ${host}:${port}...`);
 
     fetch('/api/stream/test-connection', {
         method: 'POST',
@@ -594,13 +594,13 @@ function testConnection() {
     .then(r => r.json())
     .then(data => {
         if (data.success) {
-            showBanner('connected', data.message);
+            showLiveBanner('connected', data.message);
         } else {
-            showBanner('error', data.message);
+            showLiveBanner('error', data.message);
         }
     })
     .catch(err => {
-        showBanner('error', `Failed to test connection: ${err.message}`);
+        showLiveBanner('error', `Failed to test connection: ${err.message}`);
     })
     .finally(() => {
         btn.disabled = false;
@@ -632,34 +632,10 @@ function connect() {
     }
 }
 
-function showBanner(type, message) {
-    const banner = document.getElementById('connectionBanner');
-    if (!banner) return;
-    banner.className = '';
-    banner.style.cssText = 'padding: 10px 16px; border-radius: 8px; margin-bottom: 8px; font-size: 0.9rem; display: flex; align-items: center; gap: 8px;';
-    if (type === 'connecting') {
-        banner.style.background = '#eff6ff';
-        banner.style.border = '1px solid #bfdbfe';
-        banner.style.color = '#1e40af';
-        banner.innerHTML = `<span class="spinner-border spinner-border-sm"></span> ${message}`;
-    } else if (type === 'connected') {
-        banner.style.background = '#f0fdf4';
-        banner.style.border = '1px solid #bbf7d0';
-        banner.style.color = '#166534';
-        banner.innerHTML = `<i class="bi bi-check-circle-fill"></i> ${message}`;
-        setTimeout(() => { banner.style.display = 'none'; }, 4000);
-    } else if (type === 'error') {
-        banner.style.background = '#fef2f2';
-        banner.style.border = '1px solid #fecaca';
-        banner.style.color = '#991b1b';
-        banner.innerHTML = `<i class="bi bi-exclamation-triangle-fill"></i> ${message}`;
-    }
-}
-
-function hideBanner() {
-    const banner = document.getElementById('connectionBanner');
-    if (banner) banner.style.display = 'none';
-}
+// Use global showBanner/hideBanner from main.js with local container
+const _liveBannerId = 'connectionBanner';
+function showLiveBanner(type, message) { showBanner(type, message, { containerId: _liveBannerId }); }
+function hideLiveBanner() { hideBanner(_liveBannerId); }
 
 function connectCamera() {
     const host = document.getElementById('cameraHost').value;
@@ -669,7 +645,7 @@ function connectCamera() {
     const command = document.getElementById('sshCommand').value;
 
     setStatus('connecting', 'Connecting...');
-    showBanner('connecting', `Connecting to ${host}:${port} via SSH...`);
+    showLiveBanner('connecting', `Connecting to ${host}:${port} via SSH...`);
 
     const url = `/api/stream/camera?host=${encodeURIComponent(host)}&port=${port}&username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&command=${encodeURIComponent(command)}`;
 
@@ -690,19 +666,19 @@ function connectCamera() {
 
             if (data.type === 'connected') {
                 setStatus('connected', `${host}: ${data.command || 'streaming'}`);
-                showBanner('connected', `Connected to ${host} — streaming logs`);
+                showLiveBanner('connected', `Connected to ${host} — streaming logs`);
             } else if (data.type === 'log') {
                 addLogLine(data.content);
             } else if (data.type === 'error') {
                 setStatus('error', 'Connection Error');
-                showBanner('error', data.message);
+                showLiveBanner('error', data.message);
                 addLogLine(`[ERROR] ${data.message}`, 'error');
                 disconnect();
             } else if (data.type === 'disconnected') {
                 setStatus('disconnected', 'Disconnected');
                 streamState.connected = false;
                 updateConnectButton(false);
-                hideBanner();
+                hideLiveBanner();
             }
         } catch (e) {
             console.error('Parse error:', e);
@@ -714,7 +690,7 @@ function connectCamera() {
         disconnect();
         const host = document.getElementById('cameraHost').value;
         setStatus('error', 'Connection failed');
-        showBanner('error', `Connection failed to ${host}. Camera not connected, SSH not enabled, wrong IP/port, or network issue.`);
+        showLiveBanner('error', `Connection failed to ${host}. Camera not connected, SSH not enabled, wrong IP/port, or network issue.`);
     };
 }
 
@@ -1146,13 +1122,13 @@ function testSerialConnection() {
     const btn = document.getElementById('btnTestSerial');
 
     if (!port) {
-        showBanner('error', 'Please select a serial port first');
+        showLiveBanner('error', 'Please select a serial port first');
         return;
     }
 
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-    showBanner('connecting', `Testing serial connection on ${port}...`);
+    showLiveBanner('connecting', `Testing serial connection on ${port}...`);
 
     fetch('/api/stream/serial/test', {
         method: 'POST',
@@ -1162,13 +1138,13 @@ function testSerialConnection() {
     .then(r => r.json())
     .then(data => {
         if (data.success) {
-            showBanner('connected', data.message);
+            showLiveBanner('connected', data.message);
         } else {
-            showBanner('error', data.message);
+            showLiveBanner('error', data.message);
         }
     })
     .catch(err => {
-        showBanner('error', `Failed to test connection: ${err.message}`);
+        showLiveBanner('error', `Failed to test connection: ${err.message}`);
     })
     .finally(() => {
         btn.disabled = false;
@@ -1191,12 +1167,12 @@ function connectSerial() {
     const command = commandEl ? commandEl.value : '';
 
     if (!port) {
-        showBanner('error', 'Please select a serial port first');
+        showLiveBanner('error', 'Please select a serial port first');
         return;
     }
 
     setStatus('connecting', 'Connecting...');
-    showBanner('connecting', `Connecting to ${port} via Serial (${mode.toUpperCase()})...`);
+    showLiveBanner('connecting', `Connecting to ${port} via Serial (${mode.toUpperCase()})...`);
 
     let url = `/api/stream/serial?port=${encodeURIComponent(port)}&baud=${baud}&mode=${mode}`;
     if (mode === 'soc' && command) {
@@ -1220,19 +1196,19 @@ function connectSerial() {
 
             if (data.type === 'connected') {
                 setStatus('connected', `${port}: ${data.mode || 'streaming'}`);
-                showBanner('connected', `Connected to ${port} — streaming logs`);
+                showLiveBanner('connected', `Connected to ${port} — streaming logs`);
             } else if (data.type === 'log') {
                 addLogLine(data.content);
             } else if (data.type === 'error') {
                 setStatus('error', 'Connection Error');
-                showBanner('error', data.message);
+                showLiveBanner('error', data.message);
                 addLogLine(`[ERROR] ${data.message}`, 'error');
                 disconnect();
             } else if (data.type === 'disconnected') {
                 setStatus('disconnected', 'Disconnected');
                 streamState.connected = false;
                 updateConnectButton(false);
-                hideBanner();
+                hideLiveBanner();
             }
         } catch (e) {
             console.error('Parse error:', e);
@@ -1243,7 +1219,7 @@ function connectSerial() {
         // Close immediately to prevent EventSource auto-reconnect loop
         disconnect();
         setStatus('error', 'Connection failed');
-        showBanner('error', `Serial connection failed. Check that ${port} is not in use by another application.`);
+        showLiveBanner('error', `Serial connection failed. Check that ${port} is not in use by another application.`);
     };
 }
 

@@ -286,6 +286,76 @@ function confirmDelete(message) {
     return confirm(message || 'Are you sure you want to delete this item?');
 }
 
+// ============================================
+// Global Connection Banner System
+// ============================================
+
+/**
+ * Show a connection status banner at the top of the page or inside a target container.
+ * Types: 'connecting' (blue spinner), 'connected' (green check, auto-hides),
+ *        'error' (red warning), 'info' (blue info), 'warning' (yellow)
+ * @param {string} type - Banner type
+ * @param {string} message - Message to display
+ * @param {object} opts - Options: { containerId, autoHide, duration }
+ */
+function showBanner(type, message, opts = {}) {
+    const containerId = opts.containerId || 'globalBanner';
+    let banner = document.getElementById(containerId);
+
+    // Create banner element if it doesn't exist
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = containerId;
+        // Try to insert inside main content area, fallback to body
+        const main = document.querySelector('main') || document.querySelector('.container-fluid') || document.body;
+        main.prepend(banner);
+    }
+
+    const styles = {
+        connecting: { bg: '#eff6ff', border: '#bfdbfe', color: '#1e40af', icon: '<span class="spinner-border spinner-border-sm"></span>' },
+        connected:  { bg: '#f0fdf4', border: '#bbf7d0', color: '#166534', icon: '<i class="bi bi-check-circle-fill"></i>' },
+        error:      { bg: '#fef2f2', border: '#fecaca', color: '#991b1b', icon: '<i class="bi bi-exclamation-triangle-fill"></i>' },
+        info:       { bg: '#eff6ff', border: '#bfdbfe', color: '#1e40af', icon: '<i class="bi bi-info-circle-fill"></i>' },
+        warning:    { bg: '#fffbeb', border: '#fde68a', color: '#92400e', icon: '<i class="bi bi-exclamation-circle-fill"></i>' },
+        success:    { bg: '#f0fdf4', border: '#bbf7d0', color: '#166534', icon: '<i class="bi bi-check-circle-fill"></i>' },
+    };
+
+    const s = styles[type] || styles.info;
+
+    banner.style.cssText = `padding: 10px 16px; border-radius: 8px; margin-bottom: 10px; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; background: ${s.bg}; border: 1px solid ${s.border}; color: ${s.color};`;
+    banner.innerHTML = `${s.icon} <span>${message}</span>`;
+
+    // Clear any existing auto-hide timer
+    if (banner._hideTimer) {
+        clearTimeout(banner._hideTimer);
+        banner._hideTimer = null;
+    }
+
+    // Auto-hide for success/connected banners
+    const autoHide = opts.autoHide !== undefined ? opts.autoHide : (type === 'connected' || type === 'success');
+    if (autoHide) {
+        const duration = opts.duration || 4000;
+        banner._hideTimer = setTimeout(() => {
+            banner.style.display = 'none';
+        }, duration);
+    }
+}
+
+/**
+ * Hide a connection status banner
+ * @param {string} containerId - Banner element ID (default: 'globalBanner')
+ */
+function hideBanner(containerId) {
+    const banner = document.getElementById(containerId || 'globalBanner');
+    if (banner) {
+        if (banner._hideTimer) {
+            clearTimeout(banner._hideTimer);
+            banner._hideTimer = null;
+        }
+        banner.style.display = 'none';
+    }
+}
+
 // Expose functions globally
 window.QALogAnalyzer = {
     formatFileSize,
@@ -299,5 +369,7 @@ window.QALogAnalyzer = {
     apiCall,
     updateIssueStatus,
     exportToFile,
-    confirmDelete
+    confirmDelete,
+    showBanner,
+    hideBanner
 };

@@ -166,30 +166,13 @@ function getFormData() {
     };
 }
 
+// Map Bootstrap alert types to global banner types
+const _camBannerId = 'cameraDownloadBanner';
 function showStatus(message, type) {
-    let statusEl = document.getElementById('connectionStatus');
-    if (!statusEl) {
-        // Create it dynamically if missing (e.g. cached page)
-        statusEl = document.createElement('div');
-        statusEl.id = 'connectionStatus';
-        const form = document.getElementById('downloadForm');
-        if (form) {
-            const hr = form.querySelector('hr');
-            if (hr) form.insertBefore(statusEl, hr);
-            else form.prepend(statusEl);
-        } else {
-            document.body.prepend(statusEl);
-        }
-    }
-    statusEl.className = `alert alert-${type}`;
-    statusEl.innerHTML = message;
-    statusEl.style.display = '';
+    const typeMap = { danger: 'error', success: 'connected', info: 'connecting', warning: 'warning' };
+    showBanner(typeMap[type] || type, message, { containerId: _camBannerId });
 }
-
-function hideStatus() {
-    const el = document.getElementById('connectionStatus');
-    if (el) el.style.display = 'none';
-}
+function hideStatus() { hideBanner(_camBannerId); }
 
 function setButtonsLoading(loading) {
     isLoading = loading;
