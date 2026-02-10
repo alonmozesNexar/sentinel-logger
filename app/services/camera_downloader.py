@@ -63,62 +63,75 @@ class CameraDownloader:
         self.auth_method = None
 
     def connect(self):
-        """Establish SSH connection to camera"""
+        """Establish SSH connection to camera with retry and known_hosts cleanup"""
+        import subprocess
+        import time
+
+        # Remove stale known_hosts entry — different cameras share the same IP
         try:
-            # Use SSHClient for all connection attempts (handles timeouts properly)
-            self.client = paramiko.SSHClient()
-            # AutoAddPolicy accepts new/changed host keys - cameras may change keys after firmware updates
-            # nosec B507 - appropriate for camera testing environment
-            self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # nosec B507
-
-            # 1. Try SSH key authentication first
-            try:
-                self.client.connect(
-                    hostname=self.host,
-                    port=self.port,
-                    username=self.username,
-                    timeout=self.timeout,
-                    look_for_keys=True,
-                    allow_agent=True
-                )
-                self.transport = self.client.get_transport()
-                self.auth_method = "ssh key"
-                return True, "Connected successfully (using SSH key)"
-            except paramiko.AuthenticationException:
-                # SSH key didn't work, try password
-                pass
-            except paramiko.SSHException:
-                # SSH key didn't work, try password
-                pass
-
-            # 2. Try password authentication
-            self.client.connect(
-                hostname=self.host,
-                port=self.port,
-                username=self.username,
-                password=self.password,
-                timeout=self.timeout,
-                look_for_keys=False,
-                allow_agent=False
+            subprocess.run(
+                ['ssh-keygen', '-R', self.host],
+                capture_output=True, timeout=5
             )
-            self.transport = self.client.get_transport()
-            self.auth_method = "password"
-            return True, "Connected successfully (using password)"
-        except socket.timeout:
-            return False, "Connection timed out. Is the camera on and connected to WiFi?"
-        except paramiko.AuthenticationException:
-            return False, "Authentication failed. Check username/password."
-        except paramiko.SSHException as e:
-            # Log full error for debugging, return generic message to user
-            logger.error(f"SSH connection error to {self.host}: {str(e)}")
-            return False, "SSH connection error. Check camera is accessible and SSH is enabled."
-        except socket.error as e:
-            # Log full error for debugging, return generic message to user
-            logger.error(f"Network error connecting to {self.host}: {str(e)}")
-            return False, "Network error. Check camera is connected and IP address is correct."
+            logger.debug(f"Cleared known_hosts entry for {self.host}")
         except Exception as e:
-            logger.error(f"Connection failed to {self.host}: {str(e)}")
-            return False, "Connection failed. Please check camera settings and try again."
+            logger.debug(f"ssh-keygen -R {self.host} skipped: {e}")
+
+        auth_methods = [
+            ("ssh_key", dict(look_for_keys=True, allow_agent=True)),
+            ("password", dict(password=self.password, look_for_keys=False, allow_agent=False)),
+        ]
+
+        last_error = None
+
+        for method_name, kwargs in auth_methods:
+            for attempt in range(3):
+                self.client = paramiko.SSHClient()
+                self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # nosec B507
+                try:
+                    self.client.connect(
+                        hostname=self.host,
+                        port=self.port,
+                        username=self.username,
+                        timeout=self.timeout,
+                        banner_timeout=self.timeout,
+                        **kwargs
+                    )
+                    self.transport = self.client.get_transport()
+                    self.auth_method = method_name
+                    return True, f"Connected successfully (using {method_name})"
+                except paramiko.AuthenticationException:
+                    try:
+                        self.client.close()
+                    except Exception:
+                        pass
+                    self.client = None
+                    break  # Don't retry auth failures, try next method
+                except (paramiko.SSHException, socket.error, OSError, ConnectionError) as e:
+                    last_error = e
+                    try:
+                        self.client.close()
+                    except Exception:
+                        pass
+                    self.client = None
+                    if attempt < 2:
+                        time.sleep(1 * (attempt + 1))
+                        continue
+                    break
+
+        # All methods failed — return user-friendly error
+        error_msg = str(last_error) if last_error else "Unknown error"
+        if 'Connection reset by peer' in error_msg or 'banner' in error_msg.lower():
+            return False, f"Camera SSH refused the connection ({self.host}). Try again in a few seconds, or reboot the camera."
+        elif 'Connection refused' in error_msg:
+            return False, f"SSH port {self.port} is not open on {self.host}. Ensure SSH is enabled on the camera."
+        elif 'timed out' in error_msg.lower() or isinstance(last_error, socket.timeout):
+            return False, "Connection timed out. Is the camera on and connected to WiFi?"
+        elif 'No route to host' in error_msg:
+            return False, f"Cannot reach {self.host}. Make sure you're connected to the camera's WiFi network."
+        else:
+            logger.error(f"SSH connection failed to {self.host}: {error_msg}")
+            return False, f"Connection failed: {error_msg}"
 
     def disconnect(self):
         """Close SSH connection"""
