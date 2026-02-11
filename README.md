@@ -29,6 +29,7 @@ Opens at `http://localhost:9898`.
 |---------|-------------|
 | **Log Viewer** | View parsed log entries with search (contains, regex, exact match), filter by severity, service, and component. |
 | **DB Viewer** | Browse SQLite `.db` files — table browser with search, sort, and pagination. |
+| **JSON Formatter** | Paste or upload JSON — collapsible tree view with syntax highlighting, search, format/minify, and copy. |
 | **Error Detection** | Pattern-based detection of crashes, timeouts, memory issues, recording failures, thermal warnings, and more. |
 
 ### Other
@@ -51,24 +52,27 @@ Opens at `http://localhost:9898`.
 ### Install
 
 ```bash
+python3 -m venv ~/sentinel-env
+source ~/sentinel-env/bin/activate
 pip install git+https://github.com/alonmozesNexar/sentinel-logger.git
-```
-
-### Run
-
-```bash
 sentinel-logger
 ```
 
-The browser opens automatically. To change port or host:
+> **Mac users:** If `python3` is not found, install Python first: `brew install python3`
+
+The browser opens automatically to `http://localhost:9898`.
+
+### Run (after first install)
 
 ```bash
-sentinel-logger --port 9898 --host 0.0.0.0
+source ~/sentinel-env/bin/activate
+sentinel-logger
 ```
 
 ### Update
 
 ```bash
+source ~/sentinel-env/bin/activate
 pip install --upgrade git+https://github.com/alonmozesNexar/sentinel-logger.git
 ```
 
