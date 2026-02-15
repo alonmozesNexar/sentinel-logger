@@ -3,7 +3,7 @@
 A local web tool to analyze camera log files. Upload logs manually, download them from S3 or directly from a camera over SSH, and get automatic error detection and log visualization.
 
 ```bash
-pip install git+https://github.com/alonmozesNexar/sentinel-logger.git
+pip install git+https://github.com/getNexar/sentinel-logger.git
 sentinel-logger
 ```
 
@@ -54,7 +54,7 @@ Opens at `http://localhost:9898`.
 ```bash
 python3 -m venv ~/sentinel-env
 source ~/sentinel-env/bin/activate
-pip install git+https://github.com/alonmozesNexar/sentinel-logger.git
+pip install git+https://github.com/getNexar/sentinel-logger.git
 sentinel-logger
 ```
 
@@ -73,7 +73,7 @@ sentinel-logger
 
 ```bash
 source ~/sentinel-env/bin/activate
-pip install --upgrade git+https://github.com/alonmozesNexar/sentinel-logger.git
+pip install --upgrade git+https://github.com/getNexar/sentinel-logger.git
 ```
 
 ### CLI Options
@@ -175,7 +175,7 @@ CAMERA_SSH_PORT=22
 ## Development Setup
 
 ```bash
-git clone https://github.com/alonmozesNexar/sentinel-logger.git
+git clone https://github.com/getNexar/sentinel-logger.git
 cd sentinel-logger
 python3 -m venv venv
 source venv/bin/activate
