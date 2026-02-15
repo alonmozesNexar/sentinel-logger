@@ -213,6 +213,10 @@ class S3Downloader:
             paginator = self.s3_client.get_paginator('list_objects_v2')
             files = []
 
+            # Fetch ALL files first (S3 returns in lexicographic order by key,
+            # so oldest dates come first). We need all files to sort by newest.
+            # Cap at 50000 to prevent runaway in extreme cases.
+            max_fetch = 50000
             for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
                 for obj in page.get('Contents', []):
                     # Extract date folder from path: serial/date_folder/filename
@@ -227,14 +231,14 @@ class S3Downloader:
                         'last_modified': obj['LastModified'].isoformat(),
                         'date': date_folder
                     })
-                    if len(files) >= limit:
+                    if len(files) >= max_fetch:
                         break
-                if len(files) >= limit:
+                if len(files) >= max_fetch:
                     break
 
-            # Sort by last modified (newest first)
+            # Sort by last modified (newest first), then apply limit
             files.sort(key=lambda x: x['last_modified'], reverse=True)
-            return files
+            return files[:limit]
 
         except ClientError as e:
             raise Exception(f"Failed to list logs: {e.response['Error']['Message']}")
